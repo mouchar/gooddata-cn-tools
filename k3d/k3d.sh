@@ -126,7 +126,8 @@ if [ "$CREATE_CLUSTER" ] ; then
     docker network disconnect k3d-$CLUSTER_NAME k3d-registry || :
     k3d cluster delete $CLUSTER_NAME || :
     prepare_registry
-    k3d cluster create $CLUSTER_NAME --agents 2 --api-port 0.0.0.0:6443 -p "${LBPORT:-80}:80@loadbalancer" \
+    # custom image fixing Local-path-provisioner permissions issue
+    k3d cluster create $CLUSTER_NAME --image rancher/k3s:v1.21.4-k3s1 --agents 2 --api-port 0.0.0.0:6443 -p "${LBPORT:-80}:80@loadbalancer" \
       -p "${LBSSLPORT:-443}:443@loadbalancer" \
       --k3s-server-arg '--no-deploy=traefik' \
       --volume "$PWD/registries.yaml:/etc/rancher/k3s/registries.yaml" \
