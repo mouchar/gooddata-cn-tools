@@ -85,7 +85,7 @@ authHost="localhost"
 # Port 5000 is apparently occupied on OSX/Windows
 registryPort="5050"
 
-while getopts "cH:" o; do
+while getopts "cH:p:" o; do
     case "${o}" in
         c)
             CREATE_CLUSTER=yes
