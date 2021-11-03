@@ -54,6 +54,7 @@ usage() {
     Options are:
       -c - create cluster
       -H authHost - public hostname for Dex [default: localhost]
+      -p registryPort - port of local docker registry [default: 5050]
 EOT
     exit 1
 }
@@ -70,7 +71,7 @@ prepare_registry() {
   registry_running=`docker container inspect k3d-registry -f '{{.State.Running}}' || :`
   if [ -z "$registry_running" ] ; then
     echo "Registry container doesn't exist, running the new registry container."
-    docker container run -d --name k3d-registry -v registry-data:/var/lib/registry --restart always -p 5000:5000 registry:2
+    docker container run -d --name k3d-registry -v registry-data:/var/lib/registry --restart always -p ${registryPort}:5000 registry:2
   elif [ "$registry_running" == "false" ] ; then
     echo "Registry container stopped, starting."
     docker container start k3d-registry
@@ -81,6 +82,8 @@ prepare_registry() {
 
 CREATE_CLUSTER=""
 authHost="localhost"
+# Port 5000 is apparently occupied on OSX/Windows
+registryPort="5050"
 
 while getopts "cH:" o; do
     case "${o}" in
@@ -89,6 +92,9 @@ while getopts "cH:" o; do
             ;;
         H)
             authHost="${OPTARG}"
+            ;;
+        p)
+            registryPort="${OPTARG}"
             ;;
         *)
             usage
@@ -160,16 +166,16 @@ apps=(
 for app in "${apps[@]}" ; do
     echo " == $app"
     docker pull -q gooddata/${app}:${GOODDATA_CN_VERSION}
-    docker tag gooddata/${app}:${GOODDATA_CN_VERSION} localhost:5000/${app}:${GOODDATA_CN_VERSION}
-    docker push -q localhost:5000/${app}:${GOODDATA_CN_VERSION}
+    docker tag gooddata/${app}:${GOODDATA_CN_VERSION} localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}
+    docker push -q localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}
 done
 
 # Preload pulsar to local registry
 # The reason is that it is a huge image and DockerHub token expires before the image
 # is pulled by containerd. Furthermore, is is pulled 3-4 times in parallel.
-docker pull -q apachepulsar/pulsar-all:$PULSAR_VERSION
-docker tag apachepulsar/pulsar-all:$PULSAR_VERSION localhost:5000/apachepulsar/pulsar-all:$PULSAR_VERSION
-docker push -q localhost:5000/apachepulsar/pulsar-all:$PULSAR_VERSION
+docker pull -q apachepulsar/pulsar:$PULSAR_VERSION
+docker tag apachepulsar/pulsar:$PULSAR_VERSION localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION
+docker push -q localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION
 
 kubectl config use-context k3d-$CLUSTER_NAME
 kubectl cluster-info
@@ -239,20 +245,20 @@ volumes:
 images:
   autorecovery:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar-all
+    repository: registry.local:5000/apachepulsar/pulsar
   bookie:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar-all
+    repository: registry.local:5000/apachepulsar/pulsar
   broker:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar-all
+    repository: registry.local:5000/apachepulsar/pulsar
   zookeeper:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar-all
+    repository: registry.local:5000/apachepulsar/pulsar
 pulsar_metadata:
   image:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar-all
+    repository: registry.local:5000/apachepulsar/pulsar
 EOT
 
 if [ "$CREATE_CLUSTER" ] ; then
@@ -277,6 +283,9 @@ dex:
       authSecretName: gooddata-cn-dex-tls
 image:
   repositoryPrefix: registry.local:5000
+cacheGC:
+  image:
+    name: registry.local:5000/apachepulsar/pulsar
 ingress:
   annotations:
     nginx.ingress.kubernetes.io/cors-allow-headers: X-GDC-JS-SDK-COMP, X-GDC-JS-SDK-COMP-PROPS, X-GDC-JS-PACKAGE, X-GDC-JS-PACKAGE-VERSION, x-requested-with, X-GDC-VALIDATE-RELATIONS, DNT, X-CustomHeader, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Authorization
