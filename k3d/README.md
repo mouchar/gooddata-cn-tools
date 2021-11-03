@@ -15,6 +15,11 @@ Here is a list of things you need to have installed before running the script:
 These services must be running and accessible by the user running the script:
 * Docker daemon
 
+Store your GoodData.CN license to environment variable GDCN_LICENSE:
+```
+export GDCN_LICENSE="key/......."
+```
+
 ## Configuration
 ```
     Usage: ./k3d.sh [options]
