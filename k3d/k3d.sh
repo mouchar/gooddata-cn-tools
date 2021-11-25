@@ -127,8 +127,8 @@ if [ "$CREATE_CLUSTER" ] ; then
     k3d cluster delete $CLUSTER_NAME || :
     prepare_registry
     # custom image fixing Local-path-provisioner permissions issue
-    k3d cluster create $CLUSTER_NAME --image rancher/k3s:v1.21.4-k3s1 --agents 2 --api-port 0.0.0.0:6443 -p "${LBPORT:-80}:80@loadbalancer" \
-      -p "${LBSSLPORT:-443}:443@loadbalancer" \
+    k3d cluster create $CLUSTER_NAME --image rancher/k3s:v1.21.4-k3s1 --agents 2 --api-port 0.0.0.0:6443 -p "${LBPORT:-80}:${LBPORT:-80}@loadbalancer" \
+      -p "${LBSSLPORT:-443}:${LBSSLPORT:-443}@loadbalancer" \
       --k3s-server-arg '--no-deploy=traefik' \
       --volume "$PWD/registries.yaml:/etc/rancher/k3s/registries.yaml" \
       --volume "$PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml" \
@@ -288,6 +288,7 @@ cacheGC:
   image:
     name: registry.local:5000/apachepulsar/pulsar
 ingress:
+  lbPort: ${LBSSLPORT:+$LBSSLPORT}
   annotations:
     nginx.ingress.kubernetes.io/cors-allow-headers: X-GDC-JS-SDK-COMP, X-GDC-JS-SDK-COMP-PROPS, X-GDC-JS-PACKAGE, X-GDC-JS-PACKAGE-VERSION, x-requested-with, X-GDC-VALIDATE-RELATIONS, DNT, X-CustomHeader, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Authorization
     nginx.ingress.kubernetes.io/cors-allow-origin: https://localhost:8443
