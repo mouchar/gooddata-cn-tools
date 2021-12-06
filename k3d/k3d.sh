@@ -32,7 +32,7 @@ PULSAR_REPO="https://github.com/apache/pulsar-helm-chart"
 PULSAR_URL="${PULSAR_REPO}/releases/download/pulsar-${PULSAR_CHART_VERSION}/pulsar-${PULSAR_CHART_VERSION}.tgz"
 
 # Update to newer version when available
-GOODDATA_CN_VERSION="1.4.0"
+GOODDATA_CN_VERSION="1.5.0"
 CLUSTER_NAME="default"
 # set to empty string if you want port 80
 LBPORT=""
@@ -193,7 +193,7 @@ echo "Pre-pulling images from DockerHub to local registry."
 apps=(
     afm-exec-api auth-service metadata-api result-cache scan-model sql-executor
     aqe tools organization-controller dex analytical-designer dashboards home-ui
-    ldm-modeler measure-editor apidocs
+    ldm-modeler measure-editor apidocs calcique
     )
 for app in "${apps[@]}" ; do
     echo " == $app"
