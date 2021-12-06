@@ -131,8 +131,7 @@ if [ "$CREATE_CLUSTER" ] ; then
       -p "${LBSSLPORT:-443}:${LBSSLPORT:-443}@loadbalancer" \
       --k3s-server-arg '--no-deploy=traefik' \
       --volume "$PWD/registries.yaml:/etc/rancher/k3s/registries.yaml" \
-      --volume "$PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml" \
-      --volume "$PWD/ingress-nginx.yaml:/var/lib/rancher/k3s/server/manifests/ingress-nginx.yaml"
+      --volume "$PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml"
     echo "Attaching registry container to k3d-$CLUSTER_NAME network"
     docker network connect --alias registry.local k3d-$CLUSTER_NAME k3d-registry || exit 1
     k3d kubeconfig merge default -d
@@ -156,6 +155,38 @@ items:
     labels:
       metadata.labels.kubernetes.io/metadata.name: gooddata
     name: gooddata
+EOT
+
+echo "Installing Ingress Controller"
+kubectl apply -f - <<EOT
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: ingress-nginx
+  namespace: kube-system
+spec:
+  repo: https://kubernetes.github.io/ingress-nginx
+  chart: ingress-nginx
+  version: 4.0.1
+  targetNamespace: kube-system
+  valuesContent: |-
+    controller:
+      config:
+        use-forwarded-headers: "true"
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containerPort:
+        http: ${LBPORT:-80}
+        https: ${LBSSLPORT:-443}
+      service:
+        ports:
+          http: ${LBPORT:-80}
+          https: ${LBSSLPORT:-443}
+      extraArgs:
+        http-port: ${LBPORT:-80}
+        https-port: ${LBSSLPORT:-443}
 EOT
 
 echo "Pre-pulling images from DockerHub to local registry."
