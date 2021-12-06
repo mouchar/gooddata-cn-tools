@@ -5,6 +5,10 @@ configure cert-manager with self-signed certificate authority and set up
 Ningx ingress controller.
 
 ## Requirements
+
+HW requirements are pretty high, I recommend at least 8 CPU cores and 12 GB
+RAM available to Docker. Only `x86_64` CPU architecture is supported.
+
 Here is a list of things you need to have installed before running the script:
 * [k3d](https://github.com/rancher/k3d/releases/tag/v4.4.8) 4.x
 * [kubectl](https://kubernetes.io/docs/tasks/tools/) 1.19 or higher
@@ -26,10 +30,19 @@ export GDCN_LICENSE="key/......."
     Options are:
       -c - create cluster
       -H authHost - public hostname for Dex [default: localhost]
+      -p registryPort - port of local docker registry [default: 5050]
 ```
 
 The option `-H authHost` is useful for deploying in public cloud, where the
 cloud VM has some DNS alias.
+
+The option `-p registryPort` allows you to customize port where local insecure
+registry runs. This registry is used for local image caching to save bandwidth
+during installation.
+
+`-c` should be used to create or recreate cluster. If you want just update
+existing cluster, do not use this parameter. Script will perform helm upgrade
+of all components within existing cluster.
 
 ## Usage
 ```
@@ -149,3 +162,9 @@ curl -k -H 'Authorization: Bearer YWRtaW46Ym9vdHN0cmFwOmV4YW1wbGU=' \
 ## Next steps
 Follow the [documentation](https://www.gooddata.com/developers/cloud-native/doc)
 to learn more about adding users, configuring data sources and further steps.
+
+## Cleanup
+If you want to wipe the environment, perform these steps:
+* stop and delete local Docker registry: `docker rm -f k3d-registry`
+* remove registry volume: `docker volume rm registry-data`
+* delete k3d cluster: `k3d cluster delete default`
