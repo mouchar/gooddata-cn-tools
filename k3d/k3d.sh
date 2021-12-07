@@ -255,7 +255,7 @@ monitoring:
 bookkeeper:
   configData:
     PULSAR_MEM: >
-      -Xms128m -Xmx256m -XX:MaxDirectMemorySize=128m
+      -Xms128m -Xmx300m -XX:MaxDirectMemorySize=150m
   replicaCount: 3
   resources:
     requests:
