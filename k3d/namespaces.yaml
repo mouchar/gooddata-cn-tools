@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: pulsar
+    labels:
+      metadata.labels.kubernetes.io/metadata.name: pulsar
+- apiVersion: v1
+  kind: Namespace
+  metadata:
+    labels:
+      metadata.labels.kubernetes.io/metadata.name: gooddata
+    name: gooddata

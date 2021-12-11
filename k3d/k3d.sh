@@ -25,11 +25,10 @@
 #               you plan to deploy on remote instance, set it to publicly
 #               accessible hostname.
 set -e
+# Version of Pulsar image
 PULSAR_VERSION="2.7.2"
-PULSAR_CHART_VERSION="${PULSAR_VERSION}"
-# PC-3617 GoodData PI pool banned by apache.org, we can't access their helm chart repo
-PULSAR_REPO="https://github.com/apache/pulsar-helm-chart"
-PULSAR_URL="${PULSAR_REPO}/releases/download/pulsar-${PULSAR_CHART_VERSION}/pulsar-${PULSAR_CHART_VERSION}.tgz"
+# Version of Pulsar Helm chart
+PULSAR_CHART_VERSION="2.7.2"
 
 # Update to newer version when available
 GOODDATA_CN_VERSION="1.5.0"
@@ -39,36 +38,35 @@ LBPORT=""
 # set to empty string if you want port 443
 LBSSLPORT=""
 
-# Check the license key variable
-if [ -z "$GDCN_LICENSE" ] ; then
-    cat > /dev/stderr <<EOT
-    The env variable GDCN_LICENSE must be set and it must contain a valid
-    license key for GoodData.CN
-EOT
-    exit 1
-fi
+CREATE_CLUSTER=""
+authHost="localhost"
+# Port 5000 is apparently occupied on OSX/Windows
+registryPort="5050"
 
+### Functions
 usage() {
     cat > /dev/stderr <<EOT
+    Create k3d cluster with GoodData.CN installed.
+
     Usage: $0 [options]
     Options are:
-      -c - create cluster
-      -H authHost - public hostname for Dex [default: localhost]
+      -c              - create cluster
+      -H authHost     - public hostname for Dex [default: localhost]
       -p registryPort - port of local docker registry [default: 5050]
 EOT
     exit 1
 }
 
 v() {
-    echo Running: $@
-    $@
+    echo Running: "$@"
+    "$@"
 }
 
 prepare_registry() {
-  echo "Checking for local docker registry volume"
+  echo "🐋 Checking for local docker registry volume"
   docker volume inspect registry-data -f "{{.Name}}" || docker volume create registry-data
 
-  registry_running=`docker container inspect k3d-registry -f '{{.State.Running}}' || :`
+  registry_running=$(docker container inspect k3d-registry -f '{{.State.Running}}' || :)
   if [ -z "$registry_running" ] ; then
     echo "Registry container doesn't exist, running the new registry container."
     docker container run -d --name k3d-registry -v registry-data:/var/lib/registry --restart always -p ${registryPort}:5000 registry:2
@@ -80,10 +78,38 @@ prepare_registry() {
   fi
 }
 
-CREATE_CLUSTER=""
-authHost="localhost"
-# Port 5000 is apparently occupied on OSX/Windows
-registryPort="5050"
+pull_images() {
+  echo "Pre-pulling images from DockerHub to local registry."
+  apps=(
+      afm-exec-api auth-service metadata-api result-cache scan-model sql-executor
+      aqe tools organization-controller dex analytical-designer dashboards home-ui
+      ldm-modeler measure-editor apidocs calcique
+      )
+  for app in "${apps[@]}" ; do
+      echo " == $app"
+      docker pull -q "gooddata/${app}:${GOODDATA_CN_VERSION}"
+      docker tag "gooddata/${app}:${GOODDATA_CN_VERSION}" "localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}"
+      docker push -q "localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}"
+  done
+
+  # Preload pulsar to local registry
+  # The reason is that it is a huge image and DockerHub token expires before the image
+  # is pulled by containerd. Furthermore, is is pulled 3-4 times in parallel.
+  docker pull -q "apachepulsar/pulsar:$PULSAR_VERSION"
+  docker tag "apachepulsar/pulsar:$PULSAR_VERSION" "localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION"
+  docker push -q "localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION"
+}
+
+### Start of script
+
+# Check the license key variable
+if [ -z "$GDCN_LICENSE" ] ; then
+    cat > /dev/stderr <<EOT
+    The env variable GDCN_LICENSE must be set and it must contain a valid
+    license key for GoodData.CN
+EOT
+    exit 1
+fi
 
 while getopts "cH:p:" o; do
     case "${o}" in
@@ -103,27 +129,31 @@ while getopts "cH:p:" o; do
 done
 shift $((OPTIND-1))
 
-echo "Checking for missing tools"
+if ! [[ "$registryPort" =~ ^[1-9][0-9]*$ && "$registryPort" -lt 65536 ]] ; then
+  echo "🔥 Invalid registry port '$registryPort', positive integer reqiured"
+  exit 1
+fi
+
+echo "🔎 Checking for missing tools"
 k3d version
 helm version
 kubectl version --client
 docker ps -q > /dev/null
 
-cd $(dirname $0)
+cd "$(dirname "$0")"
 
 # This is needed to make kubedns working in pods running on the same host
 # where kubedns pod is running; valid for Linux
 if [[ $(uname) != *"Darwin"* ]];then
-  echo "Checking bridge netfilter policy"
+  echo "🔎 Checking bridge netfilter policy"
   if ! grep -q 1 /proc/sys/net/bridge/bridge-nf-call-iptables ; then
-      echo "Enabling bridge-nf-call-iptables"
+      echo "  Enabling bridge-nf-call-iptables"
       echo '1' | sudo tee /proc/sys/net/bridge/bridge-nf-call-iptables
   fi
 fi
 
 # Create cluster
-if [ "$CREATE_CLUSTER" ] ; then
-    docker network disconnect k3d-$CLUSTER_NAME k3d-registry || :
+if [ -n "$CREATE_CLUSTER" ] ; then
     k3d cluster delete $CLUSTER_NAME || :
     prepare_registry
     # custom image fixing Local-path-provisioner permissions issue
@@ -136,28 +166,13 @@ if [ "$CREATE_CLUSTER" ] ; then
     docker network connect --alias registry.local k3d-$CLUSTER_NAME k3d-registry || exit 1
     k3d kubeconfig merge default -d
     kubectl config use-context k3d-$CLUSTER_NAME
+    echo "✅ k3d cluster successfully created."
 fi
 
-echo "Creating namespaces"
-kubectl apply -f - <<EOT
-apiVersion: v1
-kind: List
-items:
-- apiVersion: v1
-  kind: Namespace
-  metadata:
-    name: pulsar
-    labels:
-      metadata.labels.kubernetes.io/metadata.name: pulsar
-- apiVersion: v1
-  kind: Namespace
-  metadata:
-    labels:
-      metadata.labels.kubernetes.io/metadata.name: gooddata
-    name: gooddata
-EOT
+echo "📁 Creating namespaces"
+kubectl apply -f namespaces.yaml
 
-echo "Installing Ingress Controller"
+echo "🌎 Installing Ingress Controller"
 kubectl apply -f - <<EOT
 apiVersion: helm.cattle.io/v1
 kind: HelmChart
@@ -189,26 +204,7 @@ spec:
         https-port: ${LBSSLPORT:-443}
 EOT
 
-echo "Pre-pulling images from DockerHub to local registry."
-apps=(
-    afm-exec-api auth-service metadata-api result-cache scan-model sql-executor
-    aqe tools organization-controller dex analytical-designer dashboards home-ui
-    ldm-modeler measure-editor apidocs calcique
-    )
-for app in "${apps[@]}" ; do
-    echo " == $app"
-    docker pull -q gooddata/${app}:${GOODDATA_CN_VERSION}
-    docker tag gooddata/${app}:${GOODDATA_CN_VERSION} localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}
-    docker push -q localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}
-done
-
-# Preload pulsar to local registry
-# The reason is that it is a huge image and DockerHub token expires before the image
-# is pulled by containerd. Furthermore, is is pulled 3-4 times in parallel.
-docker pull -q apachepulsar/pulsar:$PULSAR_VERSION
-docker tag apachepulsar/pulsar:$PULSAR_VERSION localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION
-docker push -q localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION
-
+[ -z "$SKIP_PULL" ] && pull_images
 kubectl config use-context k3d-$CLUSTER_NAME
 kubectl cluster-info
 
@@ -218,7 +214,7 @@ if [ "$CREATE_CLUSTER" ] ; then
   # on non-existent resources if using selector. Therefore we must
   # poll for namespace and some specific resource first and then
   # we can wait for deployment to become available.
-  echo "Waiting for cert-manager to come up"
+  echo "🔐 Waiting for cert-manager to come up"
   while ! kubectl get ns cert-manager &> /dev/null ; do
     sleep 10
   done
@@ -228,15 +224,14 @@ if [ "$CREATE_CLUSTER" ] ; then
   kubectl -n cert-manager wait deployment --for=condition=available \
       --selector=app.kubernetes.io/instance=cert-manager
 
-#  pushd deployment/k3d
   # This script generates key/cert pair (if not already available),
   # stores it in secret gooddata/ca-key-pair and registers local
   # CA as a new cert-manager Issuer gooddata/ca-issuer
   ./gen_keys.sh
-#  popd
 fi
 
-echo "Adding missing Helm repositories"
+echo "📦 Adding missing Helm repositories"
+helm repo add pulsar https://pulsar.apache.org/charts
 helm repo add gooddata https://charts.gooddata.com/
 
 helm repo update
@@ -253,9 +248,6 @@ monitoring:
   node_exporter: false
   prometheus: false
 bookkeeper:
-  configData:
-    PULSAR_MEM: >
-      -Xms128m -Xmx300m -XX:MaxDirectMemorySize=150m
   replicaCount: 3
   resources:
     requests:
@@ -293,13 +285,15 @@ pulsar_metadata:
     repository: registry.local:5000/apachepulsar/pulsar
 EOT
 
-if [ "$CREATE_CLUSTER" ] ; then
-  initialize="--set initialize=true"
+if [ -n "$CREATE_CLUSTER" ] ; then
+  initialize=(--set initialize=true)
 fi
 
 # Install Apache Pulsar helm chart
+echo "📨 Installing Apache Pulsar"
 v helm -n pulsar upgrade --wait --timeout 7m --install pulsar \
-    --values /tmp/values-pulsar-k3d.yaml $initialize --version $PULSAR_CHART_VERSION ${PULSAR_URL}
+    --values /tmp/values-pulsar-k3d.yaml "${initialize[@]}" \
+    --version $PULSAR_CHART_VERSION apache/pulsar
 
 cat << EOT > /tmp/values-gooddata-cn.yaml
 replicaCount: 1
@@ -330,6 +324,7 @@ license:
 EOT
 
 # Install GoodData.CN Helm chart
+echo "📈 Installing GoodData.CN"
 v helm -n gooddata upgrade --install gooddata-cn --wait --timeout 7m \
     --values /tmp/values-gooddata-cn.yaml --version ${GOODDATA_CN_VERSION} \
     gooddata/gooddata-cn
