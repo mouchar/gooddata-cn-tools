@@ -5,7 +5,7 @@
 # Requirements
 # * running docker daemon, containers must be able to access the Internet
 # * docker client
-# * k3d v3.1.0+
+# * k3d v4.4.8+ (version v5.x preferred)
 # * helm v3.5+
 # * kubectl 1.18+
 #
@@ -20,6 +20,9 @@
 # Parameters:
 # -c          : Create cluster - when k3d cluster already exists, it is deleted
 #                (local docker registry is preserved)
+# -n          : Do not expose SSL port. Only port 80 (or $LBPORT) can be used for
+#               exposing k8s apps using Ingress. Cert-manager and TLS stuff will
+#               not be installed.
 # -H authHost : Sets public hostname for Dex Oauth2 provider. Defaults to
 #               localhost, which makes it convenient for local deployment. If
 #               you plan to deploy on remote instance, set it to publicly
@@ -35,10 +38,16 @@ GOODDATA_CN_VERSION="1.5.0"
 CLUSTER_NAME="default"
 # set to empty string if you want port 80
 LBPORT=""
-# set to empty string if you want port 443
+# set to empty string if you want port 443. Ignored with (-n) paramter
 LBSSLPORT=""
 
+# LBPORT="8080"
+# LBSSLPORT="3443"
+
 CREATE_CLUSTER=""
+# Comment chars for ssl-specific settings in manifests
+NO_SSL=""
+SSL="#"
 authHost="localhost"
 # Port 5000 is apparently occupied on OSX/Windows
 registryPort="5050"
@@ -51,6 +60,7 @@ usage() {
     Usage: $0 [options]
     Options are:
       -c              - create cluster
+      -n              - do not use SSL port
       -H authHost     - public hostname for Dex [default: localhost]
       -p registryPort - port of local docker registry [default: 5050]
 EOT
@@ -67,9 +77,22 @@ prepare_registry() {
   docker volume inspect registry-data -f "{{.Name}}" || docker volume create registry-data
 
   registry_running=$(docker container inspect k3d-registry -f '{{.State.Running}}' || :)
+  # Check docker registry labels - new k3d expects proper lables to be set
+  if [ -n "$registry_running" ] ; then
+    port_label=$(docker inspect k3d-registry -f '{{index .Config.Labels "k3s.registry.port.external"}}')
+    if [ "$port_label" != "${registryPort}" ] ; then
+      echo "Outdated local docker registry found, recreating."
+      docker rm -f k3d-registry
+      registry_running=''
+    fi
+  fi
   if [ -z "$registry_running" ] ; then
     echo "Registry container doesn't exist, running the new registry container."
-    docker container run -d --name k3d-registry -v registry-data:/var/lib/registry --restart always -p ${registryPort}:5000 registry:2
+    docker container run -d --name k3d-registry -v registry-data:/var/lib/registry \
+      --restart always -p "${registryPort}":5000 -l app=k3d -l k3d.cluster= \
+      -l k3d.registry.host= -l k3d.registry.hostIP=0.0.0.0 -l k3d.role=registry \
+      -l k3d.version=5.2.1 -l k3s.registry.port.external="${registryPort}" \
+      -l k3s.registry.port.internal=5000 registry:2
   elif [ "$registry_running" == "false" ] ; then
     echo "Registry container stopped, starting."
     docker container start k3d-registry
@@ -111,10 +134,15 @@ EOT
     exit 1
 fi
 
-while getopts "cH:p:" o; do
+while getopts "cnH:p:" o; do
     case "${o}" in
         c)
             CREATE_CLUSTER=yes
+            ;;
+        n)
+            # reverse the comment chars
+            NO_SSL='#'
+            SSL=''
             ;;
         H)
             authHost="${OPTARG}"
@@ -156,16 +184,40 @@ fi
 if [ -n "$CREATE_CLUSTER" ] ; then
     k3d cluster delete $CLUSTER_NAME || :
     prepare_registry
-    # custom image fixing Local-path-provisioner permissions issue
-    k3d cluster create $CLUSTER_NAME --image rancher/k3s:v1.21.4-k3s1 --agents 2 --api-port 0.0.0.0:6443 -p "${LBPORT:-80}:${LBPORT:-80}@loadbalancer" \
-      -p "${LBSSLPORT:-443}:${LBSSLPORT:-443}@loadbalancer" \
-      --k3s-server-arg '--no-deploy=traefik' \
-      --volume "$PWD/registries.yaml:/etc/rancher/k3s/registries.yaml" \
-      --volume "$PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml"
-    echo "Attaching registry container to k3d-$CLUSTER_NAME network"
-    docker network connect --alias registry.local k3d-$CLUSTER_NAME k3d-registry || exit 1
-    k3d kubeconfig merge default -d
-    kubectl config use-context k3d-$CLUSTER_NAME
+    v k3d cluster create -c /dev/stdin <<EOT
+apiVersion: k3d.io/v1alpha3
+kind: Simple
+name: default
+servers: 1
+agents: 2
+kubeAPI:
+  hostIP: "0.0.0.0"
+  hostPort: "6443"
+image: rancher/k3s:v1.21.7-k3s1
+${NO_SSL}volumes:
+${NO_SSL}  - volume: $PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml
+${NO_SSL}    nodeFilters:
+${NO_SSL}      - server:0
+ports:
+  - port: ${LBPORT:-80}:${LBPORT:-80}
+    nodeFilters:
+      - loadbalancer
+${NO_SSL}  - port: ${LBSSLPORT:-443}:${LBSSLPORT:-443}
+${NO_SSL}    nodeFilters:
+${NO_SSL}      - loadbalancer
+registries:
+  use:
+    - k3d-registry:5000
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true
+EOT
     echo "✅ k3d cluster successfully created."
 fi
 
@@ -182,33 +234,30 @@ metadata:
 spec:
   repo: https://kubernetes.github.io/ingress-nginx
   chart: ingress-nginx
-  version: 4.0.1
+  version: 4.0.13
   targetNamespace: kube-system
   valuesContent: |-
     controller:
       config:
         use-forwarded-headers: "true"
+        # If you plan to put reverse proxy in front of k3d cluster,
+        # you may want to disable ssl-redirect here:
+        ${SSL}ssl-redirect: "false"
       tolerations:
       - key: "node-role.kubernetes.io/master"
         operator: "Exists"
         effect: "NoSchedule"
-      containerPort:
-        http: ${LBPORT:-80}
-        https: ${LBSSLPORT:-443}
       service:
         ports:
           http: ${LBPORT:-80}
           https: ${LBSSLPORT:-443}
-      extraArgs:
-        http-port: ${LBPORT:-80}
-        https-port: ${LBSSLPORT:-443}
 EOT
 
 [ -z "$SKIP_PULL" ] && pull_images
 kubectl config use-context k3d-$CLUSTER_NAME
 kubectl cluster-info
 
-if [ "$CREATE_CLUSTER" ] ; then
+if [ -n "$CREATE_CLUSTER" ] && [ -n "$SSL" ] ; then
   # Wait for cert-manager. Kubectl is completely happy when listing
   # resources in non-existent namespace but it fails when waiting
   # on non-existent resources if using selector. Therefore we must
@@ -269,20 +318,20 @@ volumes:
 images:
   autorecovery:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar
+    repository: k3d-registry:5000/apachepulsar/pulsar
   bookie:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar
+    repository: k3d-registry:5000/apachepulsar/pulsar
   broker:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar
+    repository: k3d-registry:5000/apachepulsar/pulsar
   zookeeper:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar
+    repository: k3d-registry:5000/apachepulsar/pulsar
 pulsar_metadata:
   image:
     tag: $PULSAR_VERSION
-    repository: registry.local:5000/apachepulsar/pulsar
+    repository: k3d-registry:5000/apachepulsar/pulsar
 EOT
 
 if [ -n "$CREATE_CLUSTER" ] ; then
@@ -303,22 +352,17 @@ cookiePolicy: None
 dex:
   ingress:
     authHost: $authHost
-    annotations:
-      cert-manager.io/issuer: ca-issuer
-    tls:
-      authSecretName: gooddata-cn-dex-tls
+    ${NO_SSL}annotations:
+    ${NO_SSL}  cert-manager.io/issuer: ca-issuer
+    ${NO_SSL}tls:
+    ${NO_SSL}  authSecretName: gooddata-cn-dex-tls
 image:
-  repositoryPrefix: registry.local:5000
-cacheGC:
-  image:
-    name: registry.local:5000/apachepulsar/pulsar
+  repositoryPrefix: k3d-registry:5000
 ingress:
-  lbPort: ${LBSSLPORT:+$LBSSLPORT}
   annotations:
     nginx.ingress.kubernetes.io/cors-allow-headers: X-GDC-JS-SDK-COMP, X-GDC-JS-SDK-COMP-PROPS, X-GDC-JS-PACKAGE, X-GDC-JS-PACKAGE-VERSION, x-requested-with, X-GDC-VALIDATE-RELATIONS, DNT, X-CustomHeader, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Authorization
     nginx.ingress.kubernetes.io/cors-allow-origin: https://localhost:8443
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 license:
   key: "$GDCN_LICENSE"
 EOT
@@ -329,10 +373,13 @@ v helm -n gooddata upgrade --install gooddata-cn --wait --timeout 7m \
     --values /tmp/values-gooddata-cn.yaml --version ${GOODDATA_CN_VERSION} \
     gooddata/gooddata-cn
 
-cat << EOF
-Ingress available on http://localhost${LBPORT:+:$LBPORT}/ and https://localhost${LBSSLPORT:+:$LBSSLPORT}/
+[ -n "$CREATE_CLUSTER" ] && [ -n "$SSL" ] && ssl_ingress="and https://localhost${LBSSLPORT:+:$LBSSLPORT}/
 
-If you wan't using HTTPS endpoints, install CA certificate to your system as described
-above.
+If you want to use HTTPS endpoints, install CA certificate to your system as described
+above."
 
-EOF
+cat << EOT
+
+Ingress is available at http://localhost${LBPORT:+:$LBPORT}/ $ssl_ingress
+
+EOT

@@ -163,6 +163,42 @@ curl -k -H 'Authorization: Bearer YWRtaW46Ym9vdHN0cmFwOmV4YW1wbGU=' \
 Follow the [documentation](https://www.gooddata.com/developers/cloud-native/doc)
 to learn more about adding users, configuring data sources and further steps.
 
+## Running k3d cluster behind reverse proxy
+The k3d cluster has ports 80 and 443 exposed to ingress-nginx controller. While this
+setup covers the most usual use cases, it is possible that you want these ports
+to be changed for some reason. For example, you may want to have k3d cluster hidden
+behind reverse proxy that listens on these two ports so they are not available:
+
+```
+
++------+     +------------+    +--------------+    +----------------+    +-------------+
+| User | ->  |*:443 nginx | -> |*:3443 k3d-lb | -> |k3d-server:3443 | -> | ingress-ctl |
++------+     +------------+    +--------------+    +----------------+    +-------------+
+                   |                                                            |
+                   v                                                            v
+             +-------------+                                               +---------+
+             |:3000 ext.app|                                               | k8s app |
+             +-------------+                                               +---------+
+
+```
+
+In this case, the [k3d.sh](k3d.sh) script needs to be modified. There are two variables `LBPORT`
+and `LBSSLPORT`. They are empty by default, meaning the internal k3d load balancer will listen on
+default ports for given protocol (80 for http, 443 for https). You may change them to any other
+port available on your docker host (except port 6443 that is used for k8s api). This setup will
+allow you to free up default ports 80/443 for reverse proxy. There is one important drawback:
+Due to some limitation in Ingress controller, the `X-Forwarded-Port` header that is send to k8s
+services always contains value `443` unless this header is present in the incomming request.
+
+When you access k8s services through reverse proxy, it should not be an issue, because well-configured
+reverse proxies usually set this header to value to port where they actually received the incoming
+request. But if you plan to access GoodData.CN **directly** on your custom ports (`3443` in the example above),
+make sure your client sets this header to `3443` before sending requests. Otherwise, the internal
+authentication will not work because OAuth2 redirect_url will not match preconfigured value.
+
+Running k3d behind reverse proxy is therefore possible, but you will be responsible for TLS certificate
+management on reverse proxy.
+
 ## Cleanup
 If you want to wipe the environment, perform these steps:
 * stop and delete local Docker registry: `docker rm -f k3d-registry`
