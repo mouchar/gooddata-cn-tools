@@ -1,0 +1,13 @@
+apiVersion: controllers.gooddata.com/v1
+kind: Organization
+metadata:
+  name: demo-org
+  namespace: gooddata
+spec:
+  id: demo
+  name: Demo organization
+  hostname: demo.example.com
+  adminGroup: adminGroup
+  adminUser: admin
+  # Encrypted secret part of token is 'example', so token is 'YWRtaW46Ym9vdHN0cmFwOmV4YW1wbGU='
+  adminUserToken: $5$marO0ghT5pAg/CLe$ZiGVePUEPHryyEpSnnd9DmbLs4uNUKWGXjjmGnYT1NA
