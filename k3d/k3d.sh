@@ -7,7 +7,7 @@
 # * docker client
 # * k3d v4.4.8+ (version v5.x preferred)
 # * helm v3.5+
-# * kubectl 1.18+
+# * kubectl 1.21+
 #
 # helm, k3d and kubectl can be installed using gofish:
 # curl -fsSL https://raw.githubusercontent.com/fishworks/gofish/main/scripts/install.sh | bash
@@ -29,12 +29,12 @@
 #               accessible hostname.
 set -e
 # Version of Pulsar image
-PULSAR_VERSION="2.7.2"
+PULSAR_VERSION="2.7.4"
 # Version of Pulsar Helm chart
-PULSAR_CHART_VERSION="2.7.2"
+PULSAR_CHART_VERSION="2.7.8"
 
 # Update to newer version when available
-GOODDATA_CN_VERSION="1.5.0"
+GOODDATA_CN_VERSION="1.7.0"
 CLUSTER_NAME="default"
 # set to empty string if you want port 80
 LBPORT=""
