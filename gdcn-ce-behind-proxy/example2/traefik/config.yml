@@ -1,0 +1,52 @@
+http:
+  routers:
+    plugins:
+      entryPoints:
+        - "http"
+        - "https"
+      rule: "Host(`analytics.example.com`) && PathPrefix(`/plugins/`)"
+      middlewares:
+        - plugins-prefix
+      service: plugins
+      tls: {}
+
+  services:
+    plugins:
+      loadBalancer:
+        servers:
+          - url: "https://gdc-ms-se-poc-public.s3.amazonaws.com"
+        passHostHeader: false
+
+  middlewares:
+    plugins-prefix:
+      replacePathRegex:
+        regex: "^/plugins/(.*)"
+        replacement: "/AIDA5QKRHPNL23HTS5374_gdc-ms-se-poc_ramirez-internal/dplug/$1"
+
+    default-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+
+    default-whitelist:
+      ipWhiteList:
+        sourceRange:
+        - "172.0.0.0/8"
+        - "192.168.0.0/16"
+        - "10.0.0.0/24"
+
+    secured:
+      chain:
+        middlewares:
+        - default-whitelist
+        - default-headers
+
+tls:
+  certificates:
+    - certFile: /etc/traefik/analytics.example.com.crt
+      keyFile: /etc/traefik/analytics.example.com.key

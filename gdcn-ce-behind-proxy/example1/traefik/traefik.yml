@@ -1,0 +1,26 @@
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+log:
+  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: DEBUG
+  format: common
+
+accessLog:
+  format: common
+
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  http:
+    address: :3000
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  file:
+    filename: /etc/traefik/config.yml

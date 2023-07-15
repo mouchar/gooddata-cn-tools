@@ -1,0 +1,22 @@
+http:
+  routers:
+    plugins:
+      entryPoints:
+        - "http"
+      rule: "Host(`localhost`) && PathPrefix(`/plugins/`)"
+      middlewares:
+        - plugins-prefix
+      service: plugins
+
+  services:
+    plugins:
+      loadBalancer:
+        servers:
+          - url: "https://gdc-ms-se-poc-public.s3.amazonaws.com"
+        passHostHeader: false
+
+  middlewares:
+    plugins-prefix:
+      replacePathRegex:
+        regex: "^/plugins/(.*)"
+        replacement: "/AIDA5QKRHPNL23HTS5374_gdc-ms-se-poc_ramirez-internal/dplug/$1"

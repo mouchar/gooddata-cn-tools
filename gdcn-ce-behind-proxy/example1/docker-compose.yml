@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  traefik:
+    image: "traefik:v2.10"
+    container_name: "traefik"
+    networks:
+      - frontend
+      - backend
+    ports:
+      - "3000:3000"
+      # Traefik dashboard and API, insecure
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/:/etc/traefik/:ro
+
+  gooddata-cn-ce:
+    image: gooddata/gooddata-cn-ce:latest
+    container_name: gooddata-cn-ce
+    environment:
+      LICENSE_AND_PRIVACY_POLICY_ACCEPTED: "YES"
+    networks:
+      - backend
+    ports:
+      - 3000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gooddata-cn-ce.rule=Host(`localhost`)"
+    volumes:
+      - "gd-cn-data:/data:rw"
+
+volumes:
+  gd-cn-data:
+
+networks:
+  frontend:
+  backend:
