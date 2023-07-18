@@ -1,4 +1,4 @@
-# GoodData CN CE with dashboar plugins on external service
+# GoodData CN CE with dashboard plugins on external service
 
 This demo shows how to use GoodData CN CE container with Dashboard plugins hosted on remote
 web server. Due to security restrictions imposed by modern browsers (CORS, CSP), it may be
@@ -35,6 +35,10 @@ There are two examples how the solution can be used by customers.
 **Example 1** mimics regular developer usecase as if the user starts gooddata-cn-ce directly using
 `docker run`. It serves the GoodData CN on http://localhost:3000/, but incorporates the remote
 S3 bucket resources in http://localhost:3000/plugins/ URL prefix.
+
+**UPDATE**: This example will **NOT** work with dashboard plugins because plugins
+are required to be download from HTTPS-enabled endpoint. But it may be useful
+for other purposes.
 
 **Example 2** is more complex. It assumes the whole application runs on public endpoint
 https://analytics.example.com:3443/, so the assets stored in S3 bucket are accessible in
