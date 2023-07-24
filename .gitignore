@@ -1,5 +1,6 @@
 ca.crt
 ca.key
+.env
 
 # Local .terraform directories
 **/.terraform/*

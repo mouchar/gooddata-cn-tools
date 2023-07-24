@@ -1,0 +1,14 @@
+formatter: markdown
+recursive:
+  enabled: false
+sections:
+  hide:
+  - resources
+  - data-sources
+output:
+  file: "README.md"
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
