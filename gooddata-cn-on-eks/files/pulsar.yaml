@@ -1,0 +1,46 @@
+components:
+  functions: false
+  proxy: false
+  pulsar_manager: false
+  toolset: false
+# apache/pulsar-3.0.0 {
+kube-prometheus-stack:
+  enabled: false
+# }
+# apache/pulsar-2.x.x {
+monitoring:
+  alert_manager: false
+  grafana: false
+  node_exporter: false
+  prometheus: false
+# }
+autorecovery:
+  restartPodsOnConfigMapChange: true
+  configData:
+    BOOKIE_MEM: >
+      -Xms64m -Xmx128m
+      -XX:MaxDirectMemorySize=128m
+zookeeper:
+  restartPodsOnConfigMapChange: true
+  replicaCount: 3
+  annotations:
+    owner: pulsar
+  volumes:
+    data:
+      size: 2Gi
+bookkeeper:
+  restartPodsOnConfigMapChange: true
+  replicaCount: 3
+  volumes:
+    journal:
+      size: 5Gi
+    ledgers:
+      size: 5Gi
+broker:
+  restartPodsOnConfigMapChange: true
+  replicaCount: 2
+  configData:
+    subscriptionExpirationTimeMinutes: "5"
+    webSocketServiceEnabled: "true"
+    systemTopicEnabled: "true"
+    topicLevelPoliciesEnabled: "true"

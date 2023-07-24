@@ -1,0 +1,56 @@
+# Create default rules for monitoring the cluster
+# Disable rules for unreachable components
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeScheduler: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+
+# Disable component scraping for the kube controller manager, etcd, and kube-scheduler
+# These components are not reachable on EKS
+kubeControllerManager:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+
+grafana:
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: cert-manager-letsencrypt-production-route53
+      kubernetes.io/ingress.class: nginx
+    hosts:
+    - grafana.${dns_domain}
+    tls:
+    - hosts:
+      - grafana.${dns_domain}
+      secretName: grafana-web-tls
+  sidecar:
+    dashboards:
+      annotations:
+        k8s-sidecar-target-directory: Infra
+      provider:
+        foldersFromFilesStructure: true
+
+prometheus:
+  prometheusSpec:
+    # accept CRs from everywhere
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    # Prometheus StorageSpec for persistent data on AWS EBS
+    # ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/user-guides/storage.md
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi

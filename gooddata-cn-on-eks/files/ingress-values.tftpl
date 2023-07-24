@@ -1,0 +1,63 @@
+controller:
+  ingressClass: "nginx"
+  config:
+    force-ssl-redirect: "true"
+    client-body-buffer-size: "1m"
+    client-body-timeout: "180"
+    large-client-header-buffers: "4 32k"
+    client-header-buffer-size: "32k"
+    proxy-buffer-size: "16k"
+    # proxy-real-ip-cidr: 192.168.0.0/16
+    # this needs to be modified by adding gdc-specific application/vnd.gooddata.api+json
+    brotli-types: application/vnd.gooddata.api+json application/xml+rss application/atom+xml
+      application/javascript application/x-javascript application/json application/rss+xml
+      application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json
+      application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon
+      text/css text/javascript text/plain text/x-component
+    enable-brotli: 'true'
+    use-gzip: "true"
+    gzip-types: application/vnd.gooddata.api+json application/xml+rss application/atom+xml
+        application/javascript application/x-javascript application/json application/rss+xml
+        application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json
+        application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon
+        text/css text/javascript text/plain text/x-component
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    targetPorts:
+      http: http
+      https: https
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "*.${dns_domain}"
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "ssl"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-negotiation-policy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "${cert_arn}"
+      service.beta.kubernetes.io/aws-load-balancer-type: "external"
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+      # Configure healthchecks
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /healthz
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: 10254
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+      service.beta.kubernetes.io/aws-load-balancer-name: "${lb_name}"
+      service.beta.kubernetes.io/aws-load-balancer-alpn-policy: "HTTP2Preferred"
+      service.beta.kubernetes.io/aws-load-balancer-eip-allocations: ${eip_allocations}
+      service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "false"
+      service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: "deregistration_delay.connection_termination.enabled=true,preserve_client_ip.enabled=true"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    containerPort:
+      http: 80
+      https: 443
+    # healthCheckNodePort: 30906
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  replicaCount: 3
+  addHeaders:
+    Permission-Policy: geolocation 'none'; midi 'none'; sync-xhr 'none';
+      microphone 'none'; camera 'none'; magnetometer 'none'; gyroscope 'none';
+      fullscreen 'none'; payment 'none';
+    Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+serviceAccount:
+    automountServiceAccountToken: true

@@ -1,0 +1,208 @@
+afmExecApi:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1250Mi
+    requests:
+      cpu: 200m
+      memory: 1250Mi
+  jvmOptions: "-Xmx512M -XX:MaxMetaspaceSize=192M -XX:MaxDirectMemorySize=96M"
+calcique:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1500Mi
+    requests:
+      cpu: 300m
+      memory: 1500Mi
+  jvmOptions: "-Xmx700M -XX:MaxMetaspaceSize=192M -XX:MaxDirectMemorySize=300M"
+sqlExecutor:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2500Mi
+    requests:
+      cpu: 200m
+      memory: 2500Mi
+  jvmOptions: "-Xmx1024M -XX:MaxMetaspaceSize=256M -XX:MaxDirectMemorySize=256M -XX:ActiveProcessorCount=6"
+apiGateway:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 540Mi
+    requests:
+      cpu: 100m
+      memory: 540Mi
+  jvmOptions: "-Xmx200M -XX:MaxMetaspaceSize=128M -XX:MaxDirectMemorySize=42M"
+tabularExporter:
+  resources:
+    limits:
+      cpu: 400m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 500Mi
+resultCache:
+  resources:
+    limits:
+      cpu: 700m
+      memory: 4450Mi
+    requests:
+      cpu: 200m
+      memory: 4450Mi
+  jvmOptions: "-Xmx3000M -XX:MaxMetaspaceSize=140M -XX:MaxDirectMemorySize=384M"
+authService:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 720Mi
+    requests:
+      cpu: 100m
+      memory: 720Mi
+  jvmOptions: "-Xmx256M -XX:MaxMetaspaceSize=160M -XX:MaxDirectMemorySize=32M"
+metadataApi:
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 1912Mi
+    requests:
+      cpu: 550m
+      memory: 1912Mi
+  jvmOptions: "-Xmx800M -XX:MaxMetaspaceSize=256M -XX:MaxDirectMemorySize=96M -XX:ActiveProcessorCount=6 -Dkotlinx.coroutines.io.parallelism=16"
+scanModel:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 700Mi
+    requests:
+      cpu: 100m
+      memory: 700Mi
+  jvmOptions: "-Xmx170M -XX:MaxMetaspaceSize=160M -XX:MaxDirectMemorySize=32M"
+measureEditor:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+analyticalDesigner:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+apiDocs:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+dashboards:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+homeUi:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+ldmModeler:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 60Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+webComponents:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 45Mi
+    requests:
+      cpu: 20m
+      memory: 15Mi
+organizationController:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 170Mi
+exportController:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 755Mi
+    requests:
+      cpu: 250m
+      memory: 600Mi
+  jvmOptions: "-Xmx192M -XX:MaxMetaspaceSize=160M -XX:MaxDirectMemorySize=64M"
+visualExporterChromium:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 900Mi
+    requests:
+      cpu: 200m
+      memory: 900Mi
+visualExporterProxy:
+  resources:
+    limits:
+      cpu: 300m
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 200Mi
+visualExporterService:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+  jvmOptions: "-Xmx180M -XX:MaxMetaspaceSize=96M -XX:MaxDirectMemorySize=16M"
+  extraEnvVars:
+    - name: SERVER_TOMCAT_THREADS_MAX
+      value: "4"
+    - name: SERVER_TOMCAT_ACCEPTCOUNT
+      value: "500"
+pdfStaplerService:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 650Mi
+    requests:
+      cpu: 100m
+      memory: 650Mi
+  jvmOptions: "-Xmx200M -XX:MaxMetaspaceSize=96M -XX:MaxDirectMemorySize=16M"
+quiver:
+  resources:
+    cache:
+      limits:
+        cpu: 400m
+        memory: 768Mi
+      requests:
+        cpu: 150m
+        memory: 768Mi
+    xtab:
+      limits:
+        cpu: 600m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 512Mi

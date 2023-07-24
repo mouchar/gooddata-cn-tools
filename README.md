@@ -5,6 +5,8 @@
   (obsolete, needs refresh)
 * [gdcn-ce-behind-proxy/](gdcn-ce-behind-proxy/) - How to run GoodData CN CE
   behind proxy and bypass CORS/CSP issues with Dashboard Plugins
+* [gooddata-cn-on-eks/](gooddata-cn-on-eks) - Terraform module that deploys
+  GoodData CN on AWS EKS.
 * more to come
 
 ## Elsewhere

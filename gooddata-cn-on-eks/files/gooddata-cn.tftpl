@@ -1,0 +1,73 @@
+deployRedisHA: false
+deployPostgresHA: false
+
+telemetryEnabled: true
+image:
+  repositoryPrefix: '${repository_prefix}'
+
+license:
+  existingSecret: "${license_secret}"
+
+imagePullSecrets:
+- name: "${registry_secret}"
+
+replicaCount: 2
+
+serviceAccount:
+  name: gooddata-cn
+  annotations:
+    eks.amazonaws.com/role-arn: "${irsa_arn}"
+dex:
+  ingress:
+    authHost: ${auth_hostname}.${dns_domain}
+  dex:
+    config:
+      database:
+        existingSecret: "${pg_secret}"
+        sslMode: require
+ingress:
+  ingressClassName: "${ingress_class}"
+
+service:
+  redis:
+    clusterMode: false
+    hosts:
+    - "${redis_host}"
+    useSSL: true
+    existingSecret: "${redis_secret}"
+  postgres:
+    host: "${rds_host}"
+    port: 5432
+    username: postgres
+    existingSecret: "${pg_secret}"
+
+postgresql-ha:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  # TODO: pgpool/pgpool2_exporter sidecar to pgpool deployment
+cookiePolicy: None
+
+redis-ha:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+antiAffinity:
+  enabled: true
+
+podDisruptionBudget:
+  maxUnavailable: 1
+
+podMonitor:
+  enabled: true
+
+exportController:
+  fileStorageBaseUrl: "s3://${export_s3_host}/${s3_bucket_prefix}/"
+
+quiver:
+  s3DurableStorage:
+    s3Bucket: "${quiver_bucket}"
+    s3BucketPrefix: "${s3_bucket_prefix}"
+    s3Region: "${region}"
