@@ -94,7 +94,7 @@ destroy your stack with `-target`, or with repeated runs of `terraform destroy`.
 | <a name="input_dns_domain"></a> [dns\_domain](#input\_dns\_domain) | Route53 Domain where all DNS records will be created | `string` | n/a | yes |
 | <a name="input_elasticache_node_type"></a> [elasticache\_node\_type](#input\_elasticache\_node\_type) | `cache.*` node type to be deployed. Must support Redis replication group. | `string` | `"cache.t4g.medium"` | no |
 | <a name="input_gooddata_cn_helm_chart"></a> [gooddata\_cn\_helm\_chart](#input\_gooddata\_cn\_helm\_chart) | You can also pass helm chart package filename | `string` | `"gooddata-cn"` | no |
-| <a name="input_gooddata_cn_version"></a> [gooddata\_cn\_version](#input\_gooddata\_cn\_version) | GoodData CN Helm chart version | `string` | `"2.3.2"` | no |
+| <a name="input_gooddata_cn_version"></a> [gooddata\_cn\_version](#input\_gooddata\_cn\_version) | GoodData CN Helm chart version | `string` | `"2.4.0"` | no |
 | <a name="input_grafana_password"></a> [grafana\_password](#input\_grafana\_password) | Admin password to Grafana | `string` | `"AdminGrafana"` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Version of Kubernetes cluster to deploy | `string` | `"1.26"` | no |
 | <a name="input_license_key"></a> [license\_key](#input\_license\_key) | GoodData CN License | `string` | n/a | yes |

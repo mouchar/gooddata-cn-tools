@@ -57,7 +57,7 @@ variable "gooddata_cn_helm_chart" {
 variable "gooddata_cn_version" {
   description = "GoodData CN Helm chart version"
   type        = string
-  default     = "2.3.2"
+  default     = "2.4.0"
 }
 
 variable "registry_username" {
