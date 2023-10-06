@@ -140,3 +140,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_kube_prometheus_stack" {
+  description = "Install Prometheus and Grafana"
+  type        = bool
+  default     = true
+}
+
+variable "enable_ingress_nginx" {
+  description = "Install Ingress-Nginx"
+  type        = bool
+  default     = true
+}

@@ -131,16 +131,6 @@ resource "aws_eip" "lb" {
   ]
 }
 
-# HACK: AWS LB provisioned by Ingress controller may take some time
-# to be destroyed when LoadBalancer service is deleted. Because 3 EIPs
-# are associated to LB instances, we need to wait a while before trying
-# to destroy aws_eip.lb[*]. This resource affects only destroy phase.
-resource "time_sleep" "wait_2min" {
-  depends_on = [aws_eip.lb]
-
-  destroy_duration = "2m"
-}
-
 data "aws_eks_cluster" "eks_cluster" {
   name       = module.eks.cluster_name
   depends_on = [module.eks]
@@ -214,19 +204,6 @@ module "eks_addons" {
   enable_aws_load_balancer_controller = true
   enable_cluster_autoscaler           = true
   enable_metrics_server               = true
-  enable_kube_prometheus_stack        = true
-  kube_prometheus_stack = {
-    version = helm_release.kps_crds.version
-    set_sensitive = [{
-      name  = "grafana.adminPassword"
-      value = var.grafana_password
-    }]
-    values = [
-      templatefile("${path.module}/files/kps-values.tftpl", {
-        dns_domain = data.aws_route53_zone.selected.name,
-      })
-    ]
-  }
 
   enable_external_dns = true
   external_dns = {
@@ -241,25 +218,11 @@ module "eks_addons" {
     ]
   }
   external_dns_route53_zone_arns = [data.aws_route53_zone.selected.arn]
-  enable_ingress_nginx           = true
-  ingress_nginx = {
-    values = [
-      templatefile("${path.module}/files/ingress-values.tftpl", {
-        lb_name         = local.name,
-        eip_allocations = join(",", aws_eip.lb[*].allocation_id),
-        dns_domain      = data.aws_route53_zone.selected.name,
-        cert_arn        = aws_acm_certificate.wildcard.arn,
-      })
-    ]
-  }
 
   tags = local.tags
 
-  # Give Elastic IPs some time to release associations on destroy
   depends_on = [
-    time_sleep.wait_2min,
-    helm_release.kps_crds,
-    module.eks.eks_managed_node_groups
+    module.eks,
   ]
 }
 
