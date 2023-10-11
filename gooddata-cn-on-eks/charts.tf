@@ -108,6 +108,7 @@ resource "helm_release" "gooddata-cn" {
       s3_bucket_prefix  = var.s3_bucket_prefix
       quiver_bucket     = aws_s3_bucket.quiver.id
       region            = data.aws_region.current.id
+      enable_kps        = var.enable_kube_prometheus_stack
     }),
     # Sizing adjustments
     file("${path.module}/files/gooddata-cn-large.yaml"),
@@ -120,7 +121,7 @@ resource "helm_release" "gooddata-cn" {
 }
 
 resource "kubernetes_config_map" "pulsar_dashboard" {
-  for_each = fileset("${path.module}/dashboards/pulsar", "*.json")
+  for_each = var.enable_kube_prometheus_stack ? fileset("${path.module}/dashboards/pulsar", "*.json") : []
 
   metadata {
     name      = "grafana-dashboard-pulsar-${replace(each.value, ".json", "")}"
@@ -138,7 +139,7 @@ resource "kubernetes_config_map" "pulsar_dashboard" {
 }
 
 resource "kubernetes_config_map" "gooddata_dashboard" {
-  for_each = fileset("${path.module}/dashboards/gooddata", "*.json")
+  for_each = var.enable_kube_prometheus_stack ? fileset("${path.module}/dashboards/gooddata", "*.json") : []
 
   metadata {
     name      = "grafana-dashboard-gooddata-${replace(each.value, ".json", "")}"

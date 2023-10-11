@@ -45,7 +45,7 @@ postgresql-ha:
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
+      enabled: ${enable_kps}
   # TODO: pgpool/pgpool2_exporter sidecar to pgpool deployment
 cookiePolicy: None
 
@@ -53,7 +53,7 @@ redis-ha:
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
+      enabled: ${enable_kps}
 antiAffinity:
   enabled: true
 
@@ -61,7 +61,7 @@ podDisruptionBudget:
   maxUnavailable: 1
 
 podMonitor:
-  enabled: true
+  enabled: ${enable_kps}
 
 exportController:
   fileStorageBaseUrl: "s3://${export_s3_host}/${s3_bucket_prefix}/"

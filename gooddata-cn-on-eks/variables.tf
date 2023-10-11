@@ -141,6 +141,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "kube_prometheus_stack_version" {
+  description = "Prometheus Helm chart version"
+  type        = string
+  default     = "48.1.2"
+}
+
 variable "enable_kube_prometheus_stack" {
   description = "Install Prometheus and Grafana"
   type        = bool

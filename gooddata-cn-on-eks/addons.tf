@@ -19,6 +19,7 @@ locals {
         eip_allocations = join(",", aws_eip.lb[*].allocation_id),
         dns_domain      = data.aws_route53_zone.selected.name,
         cert_arn        = aws_acm_certificate.wildcard.arn,
+        enable_kps      = var.enable_kube_prometheus_stack,
       })
     ]
   }
@@ -134,7 +135,8 @@ module "ingress_nginx" {
   tags = local.tags
 
   depends_on = [
-    time_sleep.ingress_dependencies
+    time_sleep.ingress_dependencies,
+    helm_release.kps_crds
   ]
 }
 

@@ -12,7 +12,7 @@ locals {
   region          = var.location
   cloud_provider  = "aws"
   cluster_version = var.cluster_version
-  kps_version     = "48.1.2"
+  kps_version     = var.kube_prometheus_stack_version
   instance_types  = var.cluster_instance_types
 
   vpc_cidr = "10.0.0.0/16"
@@ -181,8 +181,10 @@ module "eks" {
 
 # Prometheus CRDs must be installed before eks_addons that installs
 # KPS and other plugins at once. It allows us to use resources like
-# ServiceMonitor before the KPS is actually installed.
+# ServiceMonitor and podMonitor before the KPS is actually installed.
 resource "helm_release" "kps_crds" {
+  count = var.enable_kube_prometheus_stack ? 1 : 0
+
   name             = "kube-prometheus-stack-crds"
   chart            = "kube-prometheus-stack-crds"
   version          = local.kps_version
@@ -190,6 +192,13 @@ resource "helm_release" "kps_crds" {
   description      = "A Helm chart with CRDs for Prometheus"
   namespace        = "kube-prometheus-stack"
   create_namespace = true
+
+  # to be able to dynamically enable/disable KPS
+  # we need to ensure charts using these CRDs will be updated
+  # before CRDs will be uninstalled
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 module "eks_addons" {
