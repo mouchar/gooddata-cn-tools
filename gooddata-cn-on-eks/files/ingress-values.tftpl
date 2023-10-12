@@ -52,7 +52,7 @@ controller:
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
+      enabled: ${enable_kps}
   replicaCount: 3
   addHeaders:
     Permission-Policy: geolocation 'none'; midi 'none'; sync-xhr 'none';

@@ -12,7 +12,7 @@ locals {
   region          = var.location
   cloud_provider  = "aws"
   cluster_version = var.cluster_version
-  kps_version     = "48.1.2"
+  kps_version     = var.kube_prometheus_stack_version
   instance_types  = var.cluster_instance_types
 
   vpc_cidr = "10.0.0.0/16"
@@ -131,16 +131,6 @@ resource "aws_eip" "lb" {
   ]
 }
 
-# HACK: AWS LB provisioned by Ingress controller may take some time
-# to be destroyed when LoadBalancer service is deleted. Because 3 EIPs
-# are associated to LB instances, we need to wait a while before trying
-# to destroy aws_eip.lb[*]. This resource affects only destroy phase.
-resource "time_sleep" "wait_2min" {
-  depends_on = [aws_eip.lb]
-
-  destroy_duration = "2m"
-}
-
 data "aws_eks_cluster" "eks_cluster" {
   name       = module.eks.cluster_name
   depends_on = [module.eks]
@@ -191,8 +181,10 @@ module "eks" {
 
 # Prometheus CRDs must be installed before eks_addons that installs
 # KPS and other plugins at once. It allows us to use resources like
-# ServiceMonitor before the KPS is actually installed.
+# ServiceMonitor and podMonitor before the KPS is actually installed.
 resource "helm_release" "kps_crds" {
+  count = var.enable_kube_prometheus_stack ? 1 : 0
+
   name             = "kube-prometheus-stack-crds"
   chart            = "kube-prometheus-stack-crds"
   version          = local.kps_version
@@ -200,6 +192,13 @@ resource "helm_release" "kps_crds" {
   description      = "A Helm chart with CRDs for Prometheus"
   namespace        = "kube-prometheus-stack"
   create_namespace = true
+
+  # to be able to dynamically enable/disable KPS
+  # we need to ensure charts using these CRDs will be updated
+  # before CRDs will be uninstalled
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 module "eks_addons" {
@@ -214,19 +213,6 @@ module "eks_addons" {
   enable_aws_load_balancer_controller = true
   enable_cluster_autoscaler           = true
   enable_metrics_server               = true
-  enable_kube_prometheus_stack        = true
-  kube_prometheus_stack = {
-    version = helm_release.kps_crds.version
-    set_sensitive = [{
-      name  = "grafana.adminPassword"
-      value = var.grafana_password
-    }]
-    values = [
-      templatefile("${path.module}/files/kps-values.tftpl", {
-        dns_domain = data.aws_route53_zone.selected.name,
-      })
-    ]
-  }
 
   enable_external_dns = true
   external_dns = {
@@ -241,25 +227,11 @@ module "eks_addons" {
     ]
   }
   external_dns_route53_zone_arns = [data.aws_route53_zone.selected.arn]
-  enable_ingress_nginx           = true
-  ingress_nginx = {
-    values = [
-      templatefile("${path.module}/files/ingress-values.tftpl", {
-        lb_name         = local.name,
-        eip_allocations = join(",", aws_eip.lb[*].allocation_id),
-        dns_domain      = data.aws_route53_zone.selected.name,
-        cert_arn        = aws_acm_certificate.wildcard.arn,
-      })
-    ]
-  }
 
   tags = local.tags
 
-  # Give Elastic IPs some time to release associations on destroy
   depends_on = [
-    time_sleep.wait_2min,
-    helm_release.kps_crds,
-    module.eks.eks_managed_node_groups
+    module.eks,
   ]
 }
 

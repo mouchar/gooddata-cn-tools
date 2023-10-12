@@ -102,12 +102,13 @@ resource "helm_release" "gooddata-cn" {
       pg_secret         = kubernetes_secret.pg-password.metadata.0.name,
       license_secret    = kubernetes_secret.license-secret.metadata.0.name,
       registry_secret   = kubernetes_secret.registry-secret.metadata.0.name,
-      ingress_class     = yamldecode(module.eks_addons.ingress_nginx.values).controller.ingressClass
+      ingress_class     = yamldecode(local.ingress_nginx.values.0).controller.ingressClass
       irsa_arn          = module.iam_eks_role_gooddata.iam_role_arn
       export_s3_host    = aws_s3_bucket.exports.bucket_regional_domain_name
       s3_bucket_prefix  = var.s3_bucket_prefix
       quiver_bucket     = aws_s3_bucket.quiver.id
       region            = data.aws_region.current.id
+      enable_kps        = var.enable_kube_prometheus_stack
     }),
     # Sizing adjustments
     file("${path.module}/files/gooddata-cn-large.yaml"),
@@ -115,15 +116,16 @@ resource "helm_release" "gooddata-cn" {
   depends_on = [
     helm_release.pulsar,
     helm_release.kps_crds,
+    module.ingress_nginx
   ]
 }
 
 resource "kubernetes_config_map" "pulsar_dashboard" {
-  for_each = fileset("${path.module}/dashboards/pulsar", "*.json")
+  for_each = var.enable_kube_prometheus_stack ? fileset("${path.module}/dashboards/pulsar", "*.json") : []
 
   metadata {
     name      = "grafana-dashboard-pulsar-${replace(each.value, ".json", "")}"
-    namespace = module.eks_addons.kube_prometheus_stack.namespace
+    namespace = module.kube_prometheus_stack.namespace
     labels = {
       "grafana_dashboard" = "1"
     }
@@ -137,11 +139,11 @@ resource "kubernetes_config_map" "pulsar_dashboard" {
 }
 
 resource "kubernetes_config_map" "gooddata_dashboard" {
-  for_each = fileset("${path.module}/dashboards/gooddata", "*.json")
+  for_each = var.enable_kube_prometheus_stack ? fileset("${path.module}/dashboards/gooddata", "*.json") : []
 
   metadata {
     name      = "grafana-dashboard-gooddata-${replace(each.value, ".json", "")}"
-    namespace = module.eks_addons.kube_prometheus_stack.namespace
+    namespace = module.kube_prometheus_stack.namespace
     labels = {
       "grafana_dashboard" = "1"
     }
