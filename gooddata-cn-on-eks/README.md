@@ -79,6 +79,8 @@ destroy your stack with `-target`, or with repeated runs of `terraform destroy`.
 | <a name="module_eks"></a> [eks](#module\_eks) | terraform-aws-modules/eks/aws | ~> 19.15 |
 | <a name="module_eks_addons"></a> [eks\_addons](#module\_eks\_addons) | aws-ia/eks-blueprints-addons/aws | ~> 1.1 |
 | <a name="module_iam_eks_role_gooddata"></a> [iam\_eks\_role\_gooddata](#module\_iam\_eks\_role\_gooddata) | terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks | ~> 5.28.0 |
+| <a name="module_ingress_nginx"></a> [ingress\_nginx](#module\_ingress\_nginx) | aws-ia/eks-blueprints-addon/aws | 1.1.1 |
+| <a name="module_kube_prometheus_stack"></a> [kube\_prometheus\_stack](#module\_kube\_prometheus\_stack) | aws-ia/eks-blueprints-addon/aws | 1.1.1 |
 | <a name="module_postgres"></a> [postgres](#module\_postgres) | terraform-aws-modules/rds-aurora/aws | ~> 8.3 |
 | <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-aws-modules/vpc/aws | ~> 5.0 |
 
@@ -93,9 +95,12 @@ destroy your stack with `-target`, or with repeated runs of `terraform destroy`.
 | <a name="input_cluster_version"></a> [cluster\_version](#input\_cluster\_version) | EKS Cluster Kubernetes version | `string` | `"1.26"` | no |
 | <a name="input_dns_domain"></a> [dns\_domain](#input\_dns\_domain) | Route53 Domain where all DNS records will be created | `string` | n/a | yes |
 | <a name="input_elasticache_node_type"></a> [elasticache\_node\_type](#input\_elasticache\_node\_type) | `cache.*` node type to be deployed. Must support Redis replication group. | `string` | `"cache.t4g.medium"` | no |
+| <a name="input_enable_ingress_nginx"></a> [enable\_ingress\_nginx](#input\_enable\_ingress\_nginx) | Install Ingress-Nginx | `bool` | `true` | no |
+| <a name="input_enable_kube_prometheus_stack"></a> [enable\_kube\_prometheus\_stack](#input\_enable\_kube\_prometheus\_stack) | Install Prometheus and Grafana | `bool` | `true` | no |
 | <a name="input_gooddata_cn_helm_chart"></a> [gooddata\_cn\_helm\_chart](#input\_gooddata\_cn\_helm\_chart) | You can also pass helm chart package filename | `string` | `"gooddata-cn"` | no |
 | <a name="input_gooddata_cn_version"></a> [gooddata\_cn\_version](#input\_gooddata\_cn\_version) | GoodData CN Helm chart version | `string` | `"2.4.0"` | no |
 | <a name="input_grafana_password"></a> [grafana\_password](#input\_grafana\_password) | Admin password to Grafana | `string` | `"AdminGrafana"` | no |
+| <a name="input_kube_prometheus_stack_version"></a> [kube\_prometheus\_stack\_version](#input\_kube\_prometheus\_stack\_version) | Prometheus Helm chart version | `string` | `"48.1.2"` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Version of Kubernetes cluster to deploy | `string` | `"1.26"` | no |
 | <a name="input_license_key"></a> [license\_key](#input\_license\_key) | GoodData CN License | `string` | n/a | yes |
 | <a name="input_location"></a> [location](#input\_location) | AWS Region where the services will be deployed. | `string` | `"us-east-2"` | no |
