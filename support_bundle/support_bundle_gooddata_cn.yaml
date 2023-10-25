@@ -50,10 +50,6 @@ spec:
               message: The application requires Kubernetes 1.22.0 or later
               uri: https://kubernetes.io
           - warn:
-              when: ">= 1.25.0"
-              message: The Apache Pulsar Helm chart 2.9.x fails to install on Kubernetes 1.25.0 or later
-              uri: https://kubernetes.io
-          - warn:
               when: "< 1.23.0"
               message: Your cluster meets the minimum version of Kubernetes, but we recommend you update to 1.23.0 or later.
               uri: https://kubernetes.io
