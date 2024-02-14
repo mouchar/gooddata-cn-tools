@@ -9,7 +9,7 @@ resource "random_password" "pg-password" {
 
 module "postgres" {
   source  = "terraform-aws-modules/rds-aurora/aws"
-  version = "~> 8.3"
+  version = "~> 9.0"
 
   name                            = "${local.name}-postgres"
   engine                          = "aurora-postgresql"
