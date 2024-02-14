@@ -1,35 +1,68 @@
+name: 'Terraform'
+
 on:
-  pull_request:
-    branches:
-    - master
+  push:
+    branches: [ "master" ]
     paths:
-    - ./gooddata-cn-on-eks/**
+      - ./gooddata-cn-on-eks/**
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - ./gooddata-cn-on-eks/**
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  test:
+  terraform:
+    name: 'Terraform'
     runs-on: ubuntu-latest
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
     defaults:
       run:
-        working-directory: ${{ env.tf_actions_working_dir }}
-    permissions:
-      pull-requests: write
+        shell: bash
+        working-directory: ./gooddata-cn-on-eks
+
     steps:
-    - uses: actions/checkout@v4
-    - uses: hashicorp/setup-terraform@v3
-    - name: Terraform fmt
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
       id: fmt
       run: terraform fmt -check
       continue-on-error: true
+
+      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
     - name: Terraform Init
       id: init
       run: terraform init
+
+    # Validate the configuration by checking syntax
     - name: Terraform Validate
       id: validate
       run: terraform validate -no-color
+
+      # Generates an execution plan for Terraform
+    # - name: Terraform Plan
+    #   run: terraform plan -input=false
+
+      # On push to "master", build or change infrastructure according to Terraform configuration files
+      # Note: It is recommended to set up a required "strict" status check in your repository for "Terraform Cloud". See the documentation on "strict" required status checks for more information: https://help.github.com/en/github/administering-a-repository/types-of-required-status-checks
+    # - name: Terraform Apply
+    #   if: github.ref == 'refs/heads/"master"' && github.event_name == 'push'
+    #   run: terraform apply -auto-approve -input=false
+
+    # On pull request, report on the status of the terraform validation
     - uses: actions/github-script@v6
       if: github.event_name == 'pull_request'
-      env:
-        PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
       with:
         script: |
           // 1. Retrieve existing bot comments for the PR
@@ -53,7 +86,7 @@ jobs:
 
           </details>
 
-          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
 
           // 3. If we have a comment, update it, otherwise create a new one
           if (botComment) {
