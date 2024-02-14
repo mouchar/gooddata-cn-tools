@@ -45,7 +45,7 @@ variable "dns_domain" {
 variable "pulsar_version" {
   description = "Pulsar Helm chart version"
   type        = string
-  default     = "3.0.0"
+  default     = "3.1.0"
 }
 
 variable "gooddata_cn_helm_chart" {
