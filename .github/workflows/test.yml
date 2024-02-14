@@ -3,12 +3,12 @@ name: 'Terraform'
 on:
   push:
     branches: [ "master" ]
-    paths:
-      - ./gooddata-cn-on-eks/**
+    # paths:
+      # - ./gooddata-cn-on-eks/**
   pull_request:
     branches: [ "master" ]
-    paths:
-      - ./gooddata-cn-on-eks/**
+    # paths:
+      # - ./gooddata-cn-on-eks/**
 
 permissions:
   contents: read
