@@ -82,7 +82,7 @@ resource "aws_iam_policy" "cache_policy" {
 
 module "iam_eks_role_gooddata" {
   source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version   = "~> 5.34.0"
+  version   = "~> 5.37.0"
   role_name = "${module.eks.cluster_name}-gooddata-cn"
 
   role_policy_arns = {
