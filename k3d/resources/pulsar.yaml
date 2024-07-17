@@ -1,0 +1,114 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: pulsar
+  namespace: kube-system
+spec:
+  chart: pulsar
+  version: $PULSAR_CHART_VERSION
+  repo: https://pulsar.apache.org/charts
+  targetNamespace: pulsar
+  createNamespace: true
+  timeout: "300s"
+  valuesContent: |-
+    defaultPulsarImageTag: $PULSAR_VERSION
+    volumes:
+      local_storage: true
+
+    components:
+      functions: false
+      proxy: false
+      toolset: false
+      pulsar_manager: false
+
+    images:
+      zookeeper:
+        repository: k3d-registry:${DOCKER_REGISTRY_PORT}/apachepulsar/pulsar
+      bookie:
+        repository: k3d-registry:${DOCKER_REGISTRY_PORT}/apachepulsar/pulsar
+      autorecovery:
+        repository: k3d-registry:${DOCKER_REGISTRY_PORT}/apachepulsar/pulsar
+      broker:
+        repository: k3d-registry:${DOCKER_REGISTRY_PORT}/apachepulsar/pulsar
+
+    zookeeper:
+      replicaCount: 1
+      podMonitor:
+        enabled: false
+      restartPodsOnConfigMapChange: true
+      securityContext:
+        fsGroupChangePolicy: "Always"
+      volumes:
+        data:
+          name: data
+          size: 2Gi
+          storageClassName: local-path
+
+    bookkeeper:
+      replicaCount: 3
+      podMonitor:
+        enabled: false
+      restartPodsOnConfigMapChange: true
+      securityContext:
+        fsGroupChangePolicy: "Always"
+      volumes:
+        journal:
+          name: journal
+          size: 5Gi
+          storageClassName: local-path
+        ledgers:
+          name: ledgers
+          size: 5Gi
+          storageClassName: local-path
+
+      configData:
+        PULSAR_GC: >
+          -XX:+UseG1GC
+          -XX:MaxGCPauseMillis=10
+          -XX:+ParallelRefProcEnabled
+          -XX:+UnlockExperimentalVMOptions
+          -XX:+DoEscapeAnalysis
+          -XX:ParallelGCThreads=4
+          -XX:ConcGCThreads=4
+          -XX:G1NewSizePercent=50
+          -XX:+DisableExplicitGC
+          -XX:-ResizePLAB
+          -XX:+ExitOnOutOfMemoryError
+          -XX:+PerfDisableSharedMem
+
+    autorecovery:
+      podMonitor:
+        enabled: false
+      restartPodsOnConfigMapChange: true
+      configData:
+        BOOKIE_MEM: >
+          -Xms64m -Xmx128m -XX:MaxDirectMemorySize=128m
+
+    pulsar_metadata:
+      image:
+        repository: k3d-registry:${DOCKER_REGISTRY_PORT}/apachepulsar/pulsar
+
+    broker:
+      replicaCount: 2
+      podMonitor:
+        enabled: false
+      restartPodsOnConfigMapChange: true
+      configData:
+        exposeConsumerLevelMetricsInPrometheus: "true"
+        exposeManagedCursorMetricsInPrometheus: "true"
+        exposeManagedLedgerMetricsInPrometheus: "true"
+        exposeProducerLevelMetricsInPrometheus: "true"
+        exposeTopicLevelMetricsInPrometheus: "true"
+        managedLedgerDefaultEnsembleSize: "2"
+        managedLedgerDefaultWriteQuorum: "2"
+        managedLedgerDefaultAckQuorum: "2"
+        subscriptionExpirationTimeMinutes: "5"
+        systemTopicEnabled: "true"
+        topicLevelPoliciesEnabled: "true"
+
+    proxy:
+      podMonitor:
+        enabled: false
+
+    kube-prometheus-stack:
+      enabled: false

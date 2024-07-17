@@ -1,385 +1,294 @@
 #!/usr/bin/env bash
-# (C) 2021 GoodData Corporation
+# (C) 2020-2024 GoodData Corporation
 #
 # Create K3D cluster with Pulsar and GoodData.CN Helm charts deployed.
-# Requirements
-# * running docker daemon, containers must be able to access the Internet
-# * docker client
-# * k3d v4.4.8+ (version v5.x preferred)
-# * helm v3.5+
-# * kubectl 1.21+
+# SW Requirements:
+# * kubectl 1.24+
+# * k3d 5.4.x+
+# * helm 3.x
+# * dockerd 20.x+
+# * jq
+# * envsubst (part of gettext package, also available in Homebrew)
+# * (optional but recommended) crane (https://github.com/google/go-containerregistry/blob/main/cmd/crane/README.md)
+# Environment requirements:
+# * GDCN_LICENSE contaning GoodData.CN license key
 #
-# helm, k3d and kubectl can be installed using gofish:
-# curl -fsSL https://raw.githubusercontent.com/fishworks/gofish/main/scripts/install.sh | bash
-# gofish init
-# gofish install kubectl helm k3d
+# Steps to start local k3d cluster:
+#   1. (Optional) prepare GD.CN deployment customization - check section "Customizing GD.CN deployment values"
+#   2. run './k3d.sh -c' to deploy whole cluster (can take ~ 10min, rerun without "-c" if it times out)
+#   3. (Optional) Imort generated self-signed CA certificate to browser and operating system.
+#   3. Create Organization with localhost hostname, create user in dex and metadata. Follow GoodData docs.
+#   4. go to https://localhost, and use credentials for user created in step 3.
+##
+# Customizing GD.CN deployment values:
+#  Values customizations is available through option '-f FILE' of './k3d-deploy.sh'. Below is an example how to set
+#  offline feature flag ENABLE_PDM_REMOVAL_DEPRECATION_PHASE:
+#    1. create file /tmp/custom-values.yaml with content:
+#    commonEnv:
+#      - name: GDC_FEATURES_VALUES_ENABLE_PDM_REMOVAL_DEPRECATION_PHASE
+#        value: "true"
+#    2. In step (3) of "Steps to start local k3d cluster" run './k3d-deploy.sh -c -b -v /tmp/custom-values.yaml'
 #
-# The environment variable GDCN_LICENSE needs to be set and it must contain
-# a valid license key for GoodData.CN
-#
-# Parameters:
-# -c          : Create cluster - when k3d cluster already exists, it is deleted
-#                (local docker registry is preserved)
-# -n          : Do not expose SSL port. Only port 80 (or $LBPORT) can be used for
-#               exposing k8s apps using Ingress. Cert-manager and TLS stuff will
-#               not be installed.
-# -H authHost : Sets public hostname for Dex Oauth2 provider. Defaults to
-#               localhost, which makes it convenient for local deployment. If
-#               you plan to deploy on remote instance, set it to publicly
-#               accessible hostname.
-set -e
-# Version of Pulsar image
-PULSAR_VERSION="2.7.4"
-# Version of Pulsar Helm chart
-PULSAR_CHART_VERSION="2.7.8"
 
-# Update to newer version when available
-GOODDATA_CN_VERSION="1.7.0"
+set -e
+DOCKERHUB_NAMESPACE="gooddata"
+PULSAR_VERSION="3.1.2"
+PULSAR_CHART_VERSION="3.1.0"
+GDCN_VERSION="3.13.0"
 CLUSTER_NAME="default"
 # set to empty string if you want port 80
 LBPORT=""
-# set to empty string if you want port 443. Ignored with (-n) paramter
+# set to empty string if you want port 443
 LBSSLPORT=""
+export K3D_HTTP_PORT="${LBPORT:-80}"
+export K3D_HTTPS_PORT="${LBSSLPORT:-443}"
 
-# LBPORT="8080"
-# LBSSLPORT="3443"
+DOCKET_REGISTRY_HOST=localhost
+export DOCKER_REGISTRY_PORT=5000
+# Hint: if you want to use your own registry, you can set DOCKET_REGISTRY and REPOSITORY_PREFIX to some
+# other compatible registry. Images will be copied to that registry.
+gOCKER_REGISTRY="$DOCKET_REGISTRY_HOST:$DOCKER_REGISTRY_PORT"
+REPOSITORY_PREFIX="k3d-registry:$DOCKER_REGISTRY_PORT"
 
-CREATE_CLUSTER=""
-# Comment chars for ssl-specific settings in manifests
-NO_SSL=""
-SSL="#"
-authHost="localhost"
-# Port 5000 is apparently occupied on OSX/Windows
-registryPort="5050"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
-### Functions
+pushd "$SCRIPT_DIR"
+K3D_CONFIG_FILE="k3d-config.yaml"
+# Fancy colors
+C_RED='\033[0;31m'
+C_RESET='\033[0m'
+
+# List of images to be copied from docker hub to local docker registry
+declare -A IMAGES=(
+  ["afm-exec-api"]="$DOCKERHUB_NAMESPACE/afm-exec-api"
+  ["api-gateway"]="$DOCKERHUB_NAMESPACE/api-gateway"
+  ["auth-service"]="$DOCKERHUB_NAMESPACE/auth-service"
+  ["automation"]="$DOCKERHUB_NAMESPACE/automation"
+  ["calcique"]="$DOCKERHUB_NAMESPACE/calcique"
+  ["export-controller"]="$DOCKERHUB_NAMESPACE/export-controller"
+  ["metadata-api"]="$DOCKERHUB_NAMESPACE/metadata-api"
+  ["result-cache"]="$DOCKERHUB_NAMESPACE/result-cache"
+  ["scan-model"]="$DOCKERHUB_NAMESPACE/scan-model"
+  ["sql-executor"]="$DOCKERHUB_NAMESPACE/sql-executor"
+  ["tabular-exporter"]="$DOCKERHUB_NAMESPACE/tabular-exporter"
+  ["apidocs"]="$DOCKERHUB_NAMESPACE/apidocs"
+  ["dex"]="$DOCKERHUB_NAMESPACE/dex"
+  ["organization-controller"]="$DOCKERHUB_NAMESPACE/organization-controller"
+  ["tools"]="$DOCKERHUB_NAMESPACE/tools"
+  # amd64/arm64
+  ["analytical-designer"]="$DOCKERHUB_NAMESPACE/analytical-designer"
+  # amd64/arm64
+  ["dashboards"]="$DOCKERHUB_NAMESPACE/dashboards"
+  # amd64/arm64
+  ["home-ui"]="$DOCKERHUB_NAMESPACE/home-ui"
+  # amd64/arm64
+  ["ldm-modeler"]="$DOCKERHUB_NAMESPACE/ldm-modeler"
+  # amd64/arm64
+  ["measure-editor"]="$DOCKERHUB_NAMESPACE/measure-editor"
+  # amd64/arm64
+  ["web-components"]="$DOCKERHUB_NAMESPACE/web-components"
+  # amd64/arm64
+  ["quiver"]="$DOCKERHUB_NAMESPACE/quiver"
+  # amd64 only
+  ["visual-exporter-chromium"]="$DOCKERHUB_NAMESPACE/visual-exporter-chromium"
+  ["visual-exporter-proxy"]="$DOCKERHUB_NAMESPACE/visual-exporter-proxy"
+  ["visual-exporter-service"]="$DOCKERHUB_NAMESPACE/visual-exporter-service"
+  ["pdf-stapler-service"]="$DOCKERHUB_NAMESPACE/pdf-stapler-service"
+)
+
+# Play safe and cover all imaginable options
+case $(arch) in
+  x86_64 | amd64) ARCH=amd64 ;;
+  aarch64 | arm64) ARCH=arm64 ;;
+  *)
+    echo -e"${C_RED}⛔ Unsupported architecture: $(arch)${C_RESET}"
+    exit 1
+    ;;
+esac
+
 usage() {
-    cat > /dev/stderr <<EOT
-    Create k3d cluster with GoodData.CN installed.
-
+  cat >/dev/stderr <<EOT
     Usage: $0 [options]
     Options are:
-      -c              - create cluster
-      -n              - do not use SSL port
-      -H authHost     - public hostname for Dex [default: localhost]
-      -p registryPort - port of local docker registry [default: 5050]
+      -c - create cluster
+      -v VERSION - use this version of gooddata-cn helm chart
+      -f FILE - full path to a yaml with GD.CN helm values
+
 EOT
-    exit 1
+  exit 1
+}
+
+docker_cp() {
+  from=$1
+  to=$2
+  echo "Copying $from to $to"
+  if [ "$HAS_CRANE" == "1" ]; then
+    # copy only platform specific image to local registry
+    crane cp --platform linux/$ARCH "$from" "$to"
+  else
+    docker pull -q "$from"
+    docker tag "$from" "$to"
+    docker push -q "$to"
+  fi
+}
+
+[ -z "$GDCN_LICENSE" ] && {
+  echo "License key must be stored in GDCN_LICENSE environment variable."
+  exit 1
 }
 
 v() {
-    echo Running: "$@"
-    "$@"
+  echo "Running: $*"
+  "$@"
 }
 
-prepare_registry() {
-  echo "🐋 Checking for local docker registry volume"
-  docker volume inspect registry-data -f "{{.Name}}" || docker volume create registry-data
+CREATE_CLUSTER=""
+VALUES_FILE=""
 
-  registry_running=$(docker container inspect k3d-registry -f '{{.State.Running}}' || :)
-  # Check docker registry labels - new k3d expects proper lables to be set
-  if [ -n "$registry_running" ] ; then
-    port_label=$(docker inspect k3d-registry -f '{{index .Config.Labels "k3s.registry.port.external"}}')
-    if [ "$port_label" != "${registryPort}" ] ; then
-      echo "Outdated local docker registry found, recreating."
-      docker rm -f k3d-registry
-      registry_running=''
-    fi
-  fi
-  if [ -z "$registry_running" ] ; then
-    echo "Registry container doesn't exist, running the new registry container."
-    docker container run -d --name k3d-registry -v registry-data:/var/lib/registry \
-      --restart always -p "${registryPort}":5000 -l app=k3d -l k3d.cluster= \
-      -l k3d.registry.host= -l k3d.registry.hostIP=0.0.0.0 -l k3d.role=registry \
-      -l k3d.version=5.2.1 -l k3s.registry.port.external="${registryPort}" \
-      -l k3s.registry.port.internal=5000 registry:2
-  elif [ "$registry_running" == "false" ] ; then
-    echo "Registry container stopped, starting."
-    docker container start k3d-registry
-  else
-    echo "Docker registry is already running"
-  fi
-}
-
-pull_images() {
-  echo "Pre-pulling images from DockerHub to local registry."
-  apps=(
-      afm-exec-api auth-service metadata-api result-cache scan-model sql-executor
-      aqe tools organization-controller dex analytical-designer dashboards home-ui
-      ldm-modeler measure-editor apidocs calcique
-      )
-  for app in "${apps[@]}" ; do
-      echo " == $app"
-      docker pull -q "gooddata/${app}:${GOODDATA_CN_VERSION}"
-      docker tag "gooddata/${app}:${GOODDATA_CN_VERSION}" "localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}"
-      docker push -q "localhost:${registryPort}/${app}:${GOODDATA_CN_VERSION}"
-  done
-
-  # Preload pulsar to local registry
-  # The reason is that it is a huge image and DockerHub token expires before the image
-  # is pulled by containerd. Furthermore, is is pulled 3-4 times in parallel.
-  docker pull -q "apachepulsar/pulsar:$PULSAR_VERSION"
-  docker tag "apachepulsar/pulsar:$PULSAR_VERSION" "localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION"
-  docker push -q "localhost:${registryPort}/apachepulsar/pulsar:$PULSAR_VERSION"
-}
-
-### Start of script
-
-# Check the license key variable
-if [ -z "$GDCN_LICENSE" ] ; then
-    cat > /dev/stderr <<EOT
-    The env variable GDCN_LICENSE must be set and it must contain a valid
-    license key for GoodData.CN
-EOT
-    exit 1
-fi
-
-while getopts "cnH:p:" o; do
-    case "${o}" in
-        c)
-            CREATE_CLUSTER=yes
-            ;;
-        n)
-            # reverse the comment chars
-            NO_SSL='#'
-            SSL=''
-            ;;
-        H)
-            authHost="${OPTARG}"
-            ;;
-        p)
-            registryPort="${OPTARG}"
-            ;;
-        *)
-            usage
-            ;;
-    esac
+while getopts ":cv:f:" o; do
+  case "${o}" in
+  c)
+    CREATE_CLUSTER=yes
+    ;;
+  f)
+    VALUES_FILE="$OPTARG"
+    ;;
+  v)
+    GDCN_VERSION="$OPTARG"
+    ;;
+  *)
+    usage
+    ;;
+  esac
 done
-shift $((OPTIND-1))
+shift $((OPTIND - 1))
 
-if ! [[ "$registryPort" =~ ^[1-9][0-9]*$ && "$registryPort" -lt 65536 ]] ; then
-  echo "🔥 Invalid registry port '$registryPort', positive integer reqiured"
-  exit 1
-fi
-
-echo "🔎 Checking for missing tools"
-k3d version
+echo "Checking for missing tools"
 helm version
 kubectl version --client
-docker ps -q > /dev/null
+docker ps -q >/dev/null
+command -v envsubst >/dev/null || {
+  echo "⛔ Can not find 'envsubst' command."
+  exit 1
+}
+command -v crane >/dev/null 2>&1 && {
+  echo "🎉 Found crane, will use it to copy images to local registry"
+  HAS_CRANE=1
+}
 
-cd "$(dirname "$0")"
+echo "🔎 Checking GoodData CN version"
+# If this command fails, provided version does not exist in Docker Hub
+docker manifest inspect $DOCKERHUB_NAMESPACE/dex:$GDCN_VERSION >/dev/null || {
+  echo "⛔ Can not access images in Docker Hub. Make sure $GDCN_VERSION is valid."
+  exit 1
+}
 
 # This is needed to make kubedns working in pods running on the same host
 # where kubedns pod is running; valid for Linux
-if [[ $(uname) != *"Darwin"* ]];then
+if [ "$(uname -s)" == "Linux" ]; then
   echo "🔎 Checking bridge netfilter policy"
-  if ! grep -q 1 /proc/sys/net/bridge/bridge-nf-call-iptables ; then
-      echo "  Enabling bridge-nf-call-iptables"
-      echo '1' | sudo tee /proc/sys/net/bridge/bridge-nf-call-iptables
+  if ! grep -q 1 /proc/sys/net/bridge/bridge-nf-call-iptables; then
+    echo "  Enabling bridge-nf-call-iptables"
+    echo '1' | sudo tee /proc/sys/net/bridge/bridge-nf-call-iptables
+  fi
+  # This is needed for klipper in order to configure NAT table
+  echo "🔎 Checking if iptables module is present"
+  if [ ! -d /sys/module/ip_tables ]; then
+    echo "Loading iptables to kernel"
+    insmod ip_tables || exit 1
   fi
 fi
 
 # Create cluster
-if [ -n "$CREATE_CLUSTER" ] ; then
-    k3d cluster delete $CLUSTER_NAME || :
-    prepare_registry
-    v k3d cluster create -c /dev/stdin <<EOT
-apiVersion: k3d.io/v1alpha3
-kind: Simple
-name: default
-servers: 1
-agents: 2
-kubeAPI:
-  hostIP: "0.0.0.0"
-  hostPort: "6443"
-image: rancher/k3s:v1.21.7-k3s1
-${NO_SSL}volumes:
-${NO_SSL}  - volume: $PWD/cert-manager.yaml:/var/lib/rancher/k3s/server/manifests/cert-manager.yaml
-${NO_SSL}    nodeFilters:
-${NO_SSL}      - server:0
-ports:
-  - port: ${LBPORT:-80}:${LBPORT:-80}
-    nodeFilters:
-      - loadbalancer
-${NO_SSL}  - port: ${LBSSLPORT:-443}:${LBSSLPORT:-443}
-${NO_SSL}    nodeFilters:
-${NO_SSL}      - loadbalancer
-registries:
-  use:
-    - k3d-registry:5000
-options:
-  k3s:
-    extraArgs:
-      - arg: --disable=traefik
-        nodeFilters:
-          - server:*
-  kubeconfig:
-    updateDefaultKubeconfig: true
-    switchCurrentContext: true
-EOT
-    echo "✅ k3d cluster successfully created."
+if [ "$CREATE_CLUSTER" ]; then
+  k3d cluster delete $CLUSTER_NAME || :
+  k3d cluster create -c "$K3D_CONFIG_FILE"
 fi
 
-echo "📁 Creating namespaces"
-kubectl apply -f namespaces.yaml
+# Use ext-image files to get correct image tag. Note this tag refers to the repository
+# where the image was built.
+echo "Copying images"
+for app in "${!IMAGES[@]}"; do
+  docker_cp "${IMAGES[$app]}:$GDCN_VERSION" "$DOCKER_REGISTRY/${app}:$GDCN_VERSION" &
+done
 
-echo "🌎 Installing Ingress Controller"
-kubectl apply -f - <<EOT
-apiVersion: helm.cattle.io/v1
-kind: HelmChart
-metadata:
-  name: ingress-nginx
-  namespace: kube-system
-spec:
-  repo: https://kubernetes.github.io/ingress-nginx
-  chart: ingress-nginx
-  version: 4.0.13
-  targetNamespace: kube-system
-  valuesContent: |-
-    controller:
-      config:
-        use-forwarded-headers: "true"
-        # If you plan to put reverse proxy in front of k3d cluster,
-        # you may want to disable ssl-redirect here:
-        ${SSL}ssl-redirect: "false"
-      tolerations:
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
-      service:
-        ports:
-          http: ${LBPORT:-80}
-          https: ${LBSSLPORT:-443}
-EOT
+wait # wait for copying to complete
 
-[ -z "$SKIP_PULL" ] && pull_images
+if [ "$CREATE_CLUSTER" ]; then
+  k3d kubeconfig merge default -d
+  kubectl config use-context k3d-$CLUSTER_NAME
+  kubectl create ns pulsar
+  kubectl create ns gooddata
+fi
+
+# Preload pulsar to local registry
+# The reason is that it is a huge image and DockerHub token expires before the image
+# is pulled by containerd. Furthermore, is is pulled 3-4 times in parallel.
+docker_cp apachepulsar/pulsar:$PULSAR_VERSION $DOCKER_REGISTRY/apachepulsar/pulsar:$PULSAR_VERSION
+
 kubectl config use-context k3d-$CLUSTER_NAME
 kubectl cluster-info
 
-if [ -n "$CREATE_CLUSTER" ] && [ -n "$SSL" ] ; then
+echo "license=$GDCN_LICENSE" > gooddata-license.env
+
+if [ "$CREATE_CLUSTER" ]; then
   # Wait for cert-manager. Kubectl is completely happy when listing
   # resources in non-existent namespace but it fails when waiting
   # on non-existent resources if using selector. Therefore we must
   # poll for namespace and some specific resource first and then
   # we can wait for deployment to become available.
-  echo "🔐 Waiting for cert-manager to come up"
-  while ! kubectl get ns cert-manager &> /dev/null ; do
+  echo "Waiting for cert-manager to come up"
+  while ! kubectl get ns cert-manager &>/dev/null; do
+    echo -n "."
     sleep 10
   done
-  while ! kubectl -n cert-manager get deployment cert-manager &> /dev/null ; do
+  while ! kubectl -n cert-manager get deployment cert-manager &>/dev/null; do
+    echo -n "."
     sleep 10
   done
   kubectl -n cert-manager wait deployment --for=condition=available \
-      --selector=app.kubernetes.io/instance=cert-manager
-
-  # This script generates key/cert pair (if not already available),
-  # stores it in secret gooddata/ca-key-pair and registers local
-  # CA as a new cert-manager Issuer gooddata/ca-issuer
-  ./gen_keys.sh
+    --selector=app.kubernetes.io/instance=cert-manager \
+    --timeout=240s
+  echo "Done"
+  # This script generates key/cert pair (if not already available).
+  # If the pair is already available, it will reuse it.
+  # Key, certificate, and issuer will be loaded by kustomize
+  ./gen_keys.sh -k
 fi
 
-echo "📦 Adding missing Helm repositories"
-helm repo add pulsar https://pulsar.apache.org/charts
-helm repo add gooddata https://charts.gooddata.com/
+# Generate manifests by kustomize, substitute env variables, and apply
+# shellcheck disable=SC2016
+kubectl kustomize . |
+  PULSAR_CHART_VERSION=$PULSAR_CHART_VERSION \
+    DOCKER_REGISTRY_PORT=$DOCKER_REGISTRY_PORT \
+    PULSAR_VERSION=$PULSAR_VERSION \
+    envsubst '$DOCKER_REGISTRY_PORT $PULSAR_CHART_VERSION $PULSAR_VERSION' |
+  kubectl apply -f -
 
-helm repo update
-
-cat << EOT > /tmp/values-pulsar-k3d.yaml
-components:
-  functions: false
-  proxy: false
-  pulsar_manager: false
-  toolset: false
-monitoring:
-  alert_manager: false
-  grafana: false
-  node_exporter: false
-  prometheus: false
-bookkeeper:
-  replicaCount: 3
-  resources:
-    requests:
-      cpu: 0.2
-      memory: 128Mi
-broker:
-  configData:
-    PULSAR_MEM: >
-      -Xms128m -Xmx256m -XX:MaxDirectMemorySize=128m
-    subscriptionExpirationTimeMinutes: "5"
-    webSocketServiceEnabled: "true"
-  replicaCount: 2
-  resources:
-    requests:
-      cpu: 0.2
-      memory: 256Mi
-volumes:
-  persistence: false
-images:
-  autorecovery:
-    tag: $PULSAR_VERSION
-    repository: k3d-registry:5000/apachepulsar/pulsar
-  bookie:
-    tag: $PULSAR_VERSION
-    repository: k3d-registry:5000/apachepulsar/pulsar
-  broker:
-    tag: $PULSAR_VERSION
-    repository: k3d-registry:5000/apachepulsar/pulsar
-  zookeeper:
-    tag: $PULSAR_VERSION
-    repository: k3d-registry:5000/apachepulsar/pulsar
-pulsar_metadata:
-  image:
-    tag: $PULSAR_VERSION
-    repository: k3d-registry:5000/apachepulsar/pulsar
-EOT
-
-if [ -n "$CREATE_CLUSTER" ] ; then
-  initialize=(--set initialize=true)
+if [ -n "$VALUES_FILE" ]; then
+  echo "Deploying GD.CN with values file $VALUES_FILE"
 fi
 
-# Install Apache Pulsar helm chart
-echo "📨 Installing Apache Pulsar"
-v helm -n pulsar upgrade --wait --timeout 7m --install pulsar \
-    --values /tmp/values-pulsar-k3d.yaml "${initialize[@]}" \
-    --version $PULSAR_CHART_VERSION apache/pulsar
+# deployVisualExporter=false: visualExporterService is not supported in k3d deployment now because:
+#  - chromium is not able to load dashboard on internal domain (some /etc/hosts magic has to be done there)
+#  - chromium container in visualExporterChromium service is not multiarch and needs to be built manually for arm64
+v helm -n gooddata upgrade --install gooddata-cn \
+  --repo https://charts.gooddata.com --version "$GDCN_VERSION" \
+  --wait --timeout 10m \
+  ${VALUES_FILE:+--values $VALUES_FILE} \
+  --set image.repositoryPrefix=$REPOSITORY_PREFIX \
+  --set ingress.lbProtocol=https --set ingress.lbPort="$LBSSLPORT" \
+  --set replicaCount=1 --set dex.ingress.annotations."cert-manager\.io/issuer"=ca-issuer \
+  --set dex.ingress.tls.authSecretName=gooddata-cn-dex-tls \
+  --set metadataApi.encryptor.enabled=false \
+  --set license.existingSecret=gdcn-license-key gooddata-cn
 
-cat << EOT > /tmp/values-gooddata-cn.yaml
-replicaCount: 1
-authService:
-  allowRedirect: https://localhost:8443
-cookiePolicy: None
-dex:
-  ingress:
-    authHost: $authHost
-    ${NO_SSL}annotations:
-    ${NO_SSL}  cert-manager.io/issuer: ca-issuer
-    ${NO_SSL}tls:
-    ${NO_SSL}  authSecretName: gooddata-cn-dex-tls
-image:
-  repositoryPrefix: k3d-registry:5000
-ingress:
-  annotations:
-    nginx.ingress.kubernetes.io/cors-allow-headers: X-GDC-JS-SDK-COMP, X-GDC-JS-SDK-COMP-PROPS, X-GDC-JS-PACKAGE, X-GDC-JS-PACKAGE-VERSION, x-requested-with, X-GDC-VALIDATE-RELATIONS, DNT, X-CustomHeader, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Authorization
-    nginx.ingress.kubernetes.io/cors-allow-origin: https://localhost:8443
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-license:
-  key: "$GDCN_LICENSE"
-EOT
+cat <<EOF
+Ingress available on http://localhost${LBPORT:+:$LBPORT}/ and https://localhost${LBSSLPORT:+:$LBSSLPORT}/
 
-# Install GoodData.CN Helm chart
-echo "📈 Installing GoodData.CN"
-v helm -n gooddata upgrade --install gooddata-cn --wait --timeout 7m \
-    --values /tmp/values-gooddata-cn.yaml --version ${GOODDATA_CN_VERSION} \
-    gooddata/gooddata-cn
+If you want using HTTPS endpoints, install CA certificate to your system as described
+above.
 
-[ -n "$CREATE_CLUSTER" ] && [ -n "$SSL" ] && ssl_ingress="and https://localhost${LBSSLPORT:+:$LBSSLPORT}/
+EOF
 
-If you want to use HTTPS endpoints, install CA certificate to your system as described
-above."
-
-cat << EOT
-
-Ingress is available at http://localhost${LBPORT:+:$LBPORT}/ $ssl_ingress
-
-EOT
+popd
