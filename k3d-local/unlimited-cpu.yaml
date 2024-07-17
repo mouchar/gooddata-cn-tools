@@ -1,0 +1,126 @@
+etcd:
+  resources:
+    limits:
+      cpu: ~
+dex:
+  resources:
+    limits:
+      cpu: ~
+resources:
+  limits:
+    cpu: ~
+afmExecApi:
+  resources:
+    limits:
+      cpu: ~
+analyticalDesigner:
+  resources:
+    limits:
+      cpu: ~
+authService:
+  resources:
+    limits:
+      cpu: ~
+dashboards:
+  resources:
+    limits:
+      cpu: ~
+homUi:
+  resources:
+    limits:
+      cpu: ~
+ldmModeler:
+  resources:
+    limits:
+      cpu: ~
+metadataApi:
+  resources:
+    limits:
+      cpu: ~
+apiGateway:
+  resources:
+    limits:
+      cpu: ~
+calcique:
+  resources:
+    limits:
+      cpu: ~
+measureEditor:
+  resources:
+    limits:
+      cpu: ~
+organizationController:
+  resources:
+    limits:
+      cpu: ~
+resultCache:
+  resources:
+    limits:
+      cpu: ~
+scanModel:
+  resources:
+    limits:
+      cpu: ~
+sqlExecutor:
+  resources:
+    limits:
+      cpu: ~
+webComponents:
+  resources:
+    limits:
+      cpu: ~
+apiDocs:
+  resources:
+    limits:
+      cpu: ~
+tabularExporter:
+  resources:
+    limits:
+      cpu: ~
+exportController:
+  resources:
+    limits:
+      cpu: ~
+visualExporterChromium:
+  resources:
+    limits:
+      cpu: ~
+visualExporterProxy:
+  resources:
+    limits:
+      cpu: ~
+visualExporterService:
+  resources:
+    limits:
+      cpu: ~
+pdfStaplerService:
+  resources:
+    limits:
+      cpu: ~
+tools:
+  resources:
+    limits:
+      cpu: ~
+cacheGC:
+  resources:
+    limits:
+      cpu: ~
+
+chartTests:
+  resources:
+    limits:
+      cpu: ~
+quiver:
+  resources:
+    cache:
+      limits:
+        cpu: ~
+    datasource:
+      limits:
+        cpu: ~
+    xtab:
+      limits:
+        cpu: ~
+    ml:
+      limits:
+        cpu: ~

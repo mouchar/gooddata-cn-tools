@@ -1,0 +1,5 @@
+ca.crt
+ca.key
+ca-secret.yaml
+ca-issuer.yaml
+gooddata-license.env
